@@ -1,0 +1,25 @@
+get "math.scmd";
+
+function main()
+{
+    console.clear();
+    console.print("SCMD 8-bit project");
+
+    a = 255;
+    b = 1;
+    add8();
+
+    if(result == 0)
+    {
+        console.print("255 + 1 = 0: PASS");
+    }
+
+    a = 200;
+    b = 100;
+    add8();
+
+    if(result == 44)
+    {
+        console.print("200 + 100 = 44: PASS");
+    }
+}

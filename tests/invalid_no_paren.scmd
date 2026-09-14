@@ -1,0 +1,7 @@
+bool x = true;
+function main()
+{
+    if x
+    {
+    }
+}

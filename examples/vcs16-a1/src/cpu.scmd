@@ -1,0 +1,330 @@
+// vCS-16 A1 core
+// 16-bit values are represented as hi/lo u8 pairs in SCMD 0.6.
+
+// General-purpose registers r0-r7
+u8 r0_lo = 0; u8 r0_hi = 0;
+u8 r1_lo = 0; u8 r1_hi = 0;
+u8 r2_lo = 0; u8 r2_hi = 0;
+u8 r3_lo = 0; u8 r3_hi = 0;
+u8 r4_lo = 0; u8 r4_hi = 0;
+u8 r5_lo = 0; u8 r5_hi = 0;
+u8 r6_lo = 0; u8 r6_hi = 0;
+u8 r7_lo = 0; u8 r7_hi = 0;
+
+// Special registers / machine state
+u8 pc_lo = 0;
+u8 pc_hi = 0;
+bool flag_z = false;
+bool flag_n = false;
+bool flag_c = false;
+bool flag_v = false;
+bool halted = false;
+bool fault = false;
+bool rom_valid = false;
+u8 cycle_count = 0;
+
+// Instruction register
+u8 ir_hi = 0;
+u8 ir_lo = 0;
+u8 opcode = 0;
+u8 op_rd = 0;
+u8 op_rs = 0;
+u8 op_fn = 0;
+u8 op_cond = 0;
+
+// Register-file bus
+u8 reg_sel = 0;
+u8 bus_lo = 0;
+u8 bus_hi = 0;
+
+// ALU input/output buses
+u8 alu_a_lo = 0;
+u8 alu_a_hi = 0;
+u8 alu_b_lo = 0;
+u8 alu_b_hi = 0;
+u8 alu_r_lo = 0;
+u8 alu_r_hi = 0;
+u8 alu_fn = 0;
+
+// ALU scratch
+u8 alu_t0 = 0;
+u8 alu_t1 = 0;
+u8 alu_t2 = 0;
+u8 alu_carry_u8 = 0;
+bool alu_b0 = false;
+bool alu_b1 = false;
+bool alu_b2 = false;
+bool alu_sa = false;
+bool alu_sb = false;
+bool alu_sr = false;
+
+function vcs_reset()
+{
+    r0_lo = 0; r0_hi = 0;
+    r1_lo = 0; r1_hi = 0;
+    r2_lo = 0; r2_hi = 0;
+    r3_lo = 0; r3_hi = 0;
+    r4_lo = 0; r4_hi = 0;
+    r5_lo = 0; r5_hi = 0;
+    r6_lo = 0; r6_hi = 0;
+    r7_lo = 0; r7_hi = 0;
+    pc_lo = 0; pc_hi = 0;
+    flag_z = false; flag_n = false; flag_c = false; flag_v = false;
+    halted = false; fault = false; rom_valid = false;
+    cycle_count = 0;
+}
+
+function vcs_pc_inc()
+{
+    pc_lo += 1;
+    if(pc_lo == 0)
+    {
+        pc_hi += 1;
+    }
+}
+
+function vcs_reg_read()
+{
+    bus_lo = 0;
+    bus_hi = 0;
+
+    if(reg_sel == 0) { bus_lo = r0_lo; bus_hi = r0_hi; }
+    else if(reg_sel == 1) { bus_lo = r1_lo; bus_hi = r1_hi; }
+    else if(reg_sel == 2) { bus_lo = r2_lo; bus_hi = r2_hi; }
+    else if(reg_sel == 3) { bus_lo = r3_lo; bus_hi = r3_hi; }
+    else if(reg_sel == 4) { bus_lo = r4_lo; bus_hi = r4_hi; }
+    else if(reg_sel == 5) { bus_lo = r5_lo; bus_hi = r5_hi; }
+    else if(reg_sel == 6) { bus_lo = r6_lo; bus_hi = r6_hi; }
+    else if(reg_sel == 7) { bus_lo = r7_lo; bus_hi = r7_hi; }
+    else { fault = true; }
+}
+
+function vcs_reg_write()
+{
+    if(reg_sel == 0) { r0_lo = bus_lo; r0_hi = bus_hi; }
+    else if(reg_sel == 1) { r1_lo = bus_lo; r1_hi = bus_hi; }
+    else if(reg_sel == 2) { r2_lo = bus_lo; r2_hi = bus_hi; }
+    else if(reg_sel == 3) { r3_lo = bus_lo; r3_hi = bus_hi; }
+    else if(reg_sel == 4) { r4_lo = bus_lo; r4_hi = bus_hi; }
+    else if(reg_sel == 5) { r5_lo = bus_lo; r5_hi = bus_hi; }
+    else if(reg_sel == 6) { r6_lo = bus_lo; r6_hi = bus_hi; }
+    else if(reg_sel == 7) { r7_lo = bus_lo; r7_hi = bus_hi; }
+    else { fault = true; }
+}
+
+function vcs_flags_zn()
+{
+    flag_z = (alu_r_hi == 0) && (alu_r_lo == 0);
+    flag_n = (alu_r_hi & 0x80) != 0;
+}
+
+function vcs_alu()
+{
+    alu_r_lo = 0;
+    alu_r_hi = 0;
+    flag_c = false;
+    flag_v = false;
+
+    // ADD
+    if(alu_fn == 0)
+    {
+        alu_r_lo = alu_a_lo + alu_b_lo;
+        alu_b0 = alu_r_lo < alu_a_lo;
+        alu_carry_u8 = 0;
+        if(alu_b0) { alu_carry_u8 = 1; }
+
+        alu_t0 = alu_a_hi + alu_b_hi;
+        alu_b1 = alu_t0 < alu_a_hi;
+        alu_r_hi = alu_t0 + alu_carry_u8;
+        alu_b2 = alu_r_hi < alu_t0;
+        flag_c = alu_b1 || alu_b2;
+
+        alu_sa = (alu_a_hi & 0x80) != 0;
+        alu_sb = (alu_b_hi & 0x80) != 0;
+        alu_sr = (alu_r_hi & 0x80) != 0;
+        flag_v = (alu_sa == alu_sb) && (alu_sr != alu_sa);
+        vcs_flags_zn();
+    }
+    // SUB / CMP share subtract datapath
+    else if(alu_fn == 1 || alu_fn == 5)
+    {
+        alu_b0 = alu_a_lo < alu_b_lo;
+        alu_r_lo = alu_a_lo - alu_b_lo;
+        alu_carry_u8 = 0;
+        if(alu_b0) { alu_carry_u8 = 1; }
+
+        alu_b1 = alu_a_hi < alu_b_hi;
+        alu_t0 = alu_a_hi - alu_b_hi;
+        alu_b2 = alu_t0 < alu_carry_u8;
+        alu_r_hi = alu_t0 - alu_carry_u8;
+        flag_c = alu_b1 || alu_b2; // C means borrow for SUB/CMP in A1
+
+        alu_sa = (alu_a_hi & 0x80) != 0;
+        alu_sb = (alu_b_hi & 0x80) != 0;
+        alu_sr = (alu_r_hi & 0x80) != 0;
+        flag_v = (alu_sa != alu_sb) && (alu_sr != alu_sa);
+        vcs_flags_zn();
+    }
+    else if(alu_fn == 2)
+    {
+        alu_r_lo = alu_a_lo & alu_b_lo;
+        alu_r_hi = alu_a_hi & alu_b_hi;
+        vcs_flags_zn();
+    }
+    else if(alu_fn == 3)
+    {
+        alu_r_lo = alu_a_lo | alu_b_lo;
+        alu_r_hi = alu_a_hi | alu_b_hi;
+        vcs_flags_zn();
+    }
+    else if(alu_fn == 4)
+    {
+        alu_r_lo = alu_a_lo ^ alu_b_lo;
+        alu_r_hi = alu_a_hi ^ alu_b_hi;
+        vcs_flags_zn();
+    }
+    else if(alu_fn == 6)
+    {
+        flag_c = (alu_a_hi & 0x80) != 0;
+        alu_r_hi = (alu_a_hi << 1) | (alu_a_lo >> 7);
+        alu_r_lo = alu_a_lo << 1;
+        vcs_flags_zn();
+    }
+    else if(alu_fn == 7)
+    {
+        flag_c = (alu_a_lo & 1) != 0;
+        alu_r_lo = (alu_a_lo >> 1) | ((alu_a_hi & 1) << 7);
+        alu_r_hi = alu_a_hi >> 1;
+        vcs_flags_zn();
+    }
+    else
+    {
+        fault = true;
+    }
+}
+
+function vcs_branch_condition()
+{
+    alu_b0 = false;
+    if(op_cond == 0) { alu_b0 = true; }
+    else if(op_cond == 1) { alu_b0 = flag_z; }
+    else if(op_cond == 2) { alu_b0 = !flag_z; }
+    else if(op_cond == 3) { alu_b0 = flag_c; }
+    else if(op_cond == 4) { alu_b0 = !flag_c; }
+    else if(op_cond == 5) { alu_b0 = flag_n; }
+    else if(op_cond == 6) { alu_b0 = !flag_n; }
+    else if(op_cond == 7) { alu_b0 = flag_v; }
+    else if(op_cond == 8) { alu_b0 = !flag_v; }
+    else { fault = true; }
+}
+
+function vcs_step()
+{
+    // Fetch base instruction at PC, then make PC point at the next word.
+    vcs_rom_fetch();
+    if(!rom_valid)
+    {
+        fault = true;
+        return;
+    }
+
+    opcode = ir_hi >> 4;
+    vcs_pc_inc();
+
+    // SYS: 0x0000 NOP, 0x0001 HALT
+    if(opcode == 0)
+    {
+        if(ir_hi == 0 && ir_lo == 0)
+        {
+            // nop
+        }
+        else if(ir_hi == 0 && ir_lo == 1)
+        {
+            halted = true;
+        }
+        else
+        {
+            fault = true;
+        }
+    }
+    // MOV rd, rs
+    else if(opcode == 1)
+    {
+        op_rd = (ir_hi >> 1) & 7;
+        op_rs = ((ir_hi & 1) << 2) | (ir_lo >> 6);
+        reg_sel = op_rs; vcs_reg_read();
+        reg_sel = op_rd; vcs_reg_write();
+    }
+    // ALU rd, rs, fn
+    else if(opcode == 2)
+    {
+        op_rd = (ir_hi >> 1) & 7;
+        op_rs = ((ir_hi & 1) << 2) | (ir_lo >> 6);
+        op_fn = (ir_lo >> 3) & 7;
+
+        reg_sel = op_rd; vcs_reg_read();
+        alu_a_lo = bus_lo; alu_a_hi = bus_hi;
+        reg_sel = op_rs; vcs_reg_read();
+        alu_b_lo = bus_lo; alu_b_hi = bus_hi;
+        alu_fn = op_fn;
+        vcs_alu();
+
+        if(op_fn != 5)
+        {
+            bus_lo = alu_r_lo; bus_hi = alu_r_hi;
+            reg_sel = op_rd; vcs_reg_write();
+        }
+    }
+    // LDI rd, imm16
+    else if(opcode == 3)
+    {
+        op_rd = (ir_hi >> 1) & 7;
+        vcs_rom_fetch();
+        if(!rom_valid)
+        {
+            fault = true;
+            return;
+        }
+        bus_hi = ir_hi; bus_lo = ir_lo;
+        reg_sel = op_rd; vcs_reg_write();
+        vcs_pc_inc();
+    }
+    // BR cond, absolute word address
+    else if(opcode == 4)
+    {
+        op_cond = ir_hi & 0x0F;
+        vcs_rom_fetch();
+        if(!rom_valid)
+        {
+            fault = true;
+            return;
+        }
+        bus_hi = ir_hi; bus_lo = ir_lo;
+        vcs_pc_inc();
+        vcs_branch_condition();
+        if(alu_b0)
+        {
+            pc_hi = bus_hi;
+            pc_lo = bus_lo;
+        }
+    }
+    else
+    {
+        fault = true;
+    }
+}
+
+function vcs_run()
+{
+    while(!halted && !fault && cycle_count < 200)
+    {
+        vcs_step();
+        cycle_count += 1;
+        wait 1ticks;
+    }
+
+    if(!halted && !fault)
+    {
+        fault = true;
+    }
+}

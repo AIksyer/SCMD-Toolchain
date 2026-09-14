@@ -1,0 +1,64 @@
+get "cpu.scmd";
+get "generated/rom.scmd";
+
+function main()
+{
+    console.clear();
+    console.print("========================================");
+    console.print("vCS-16 A1 BRING-UP");
+    console.print("fetch / decode / execute self-test");
+    console.print("program: sum 1..10 into r0");
+    console.print("========================================");
+
+    vcs_reset();
+    vcs_run();
+
+    if(halted && !fault)
+    {
+        console.print("CPU HALT: PASS");
+    }
+    else
+    {
+        console.print("CPU HALT: FAIL");
+    }
+
+    if(r0_hi == 0 && r0_lo == 55)
+    {
+        console.print("R0 = 0x0037 (55): PASS");
+    }
+    else
+    {
+        console.print("R0 expected 55: FAIL");
+    }
+
+    if(r1_hi == 0 && r1_lo == 11)
+    {
+        console.print("R1 = 0x000B (11): PASS");
+    }
+    else
+    {
+        console.print("R1 expected 11: FAIL");
+    }
+
+    if(pc_hi == 0 && pc_lo == 14)
+    {
+        console.print("PC = 0x000E after HALT: PASS");
+    }
+    else
+    {
+        console.print("PC final value: CHECK");
+    }
+
+    if(halted && !fault && r0_hi == 0 && r0_lo == 55 && r1_hi == 0 && r1_lo == 11)
+    {
+        console.print("========================================");
+        console.print("vCS-16 A1 CORE: PASS");
+        console.print("========================================");
+    }
+    else
+    {
+        console.print("========================================");
+        console.print("vCS-16 A1 CORE: FAIL");
+        console.print("========================================");
+    }
+}

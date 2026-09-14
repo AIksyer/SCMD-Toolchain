@@ -1,0 +1,72 @@
+function main()
+{
+    u8 a = 200;
+    u8 b = 100;
+    u8 c = 0;
+
+    c = a + b;
+    if(c == 44)
+    {
+        console.print("ADD PASS");
+    }
+
+    c = a - b;
+    if(c == 100)
+    {
+        console.print("SUB PASS");
+    }
+
+    c = 13 * 7;
+    if(c == 91)
+    {
+        console.print("MUL PASS");
+    }
+
+    c = 200 / 7;
+    if(c == 28)
+    {
+        console.print("DIV PASS");
+    }
+
+    c = 200 % 7;
+    if(c == 4)
+    {
+        console.print("MOD PASS");
+    }
+
+    c = 0b10101010 & 0b11110000;
+    if(c == 0b10100000)
+    {
+        console.print("AND PASS");
+    }
+
+    c = 0b10101010 | 0b00001111;
+    if(c == 0b10101111)
+    {
+        console.print("OR PASS");
+    }
+
+    c = 0b10101010 ^ 0b11111111;
+    if(c == 0b01010101)
+    {
+        console.print("XOR PASS");
+    }
+
+    b = 3;
+    c = 1 << b;
+    if(c == 8)
+    {
+        console.print("SHL PASS");
+    }
+
+    c = 128 >> b;
+    if(c == 16)
+    {
+        console.print("SHR PASS");
+    }
+
+    if(a > b && a >= 200 && b < a && b <= 3 && a != b)
+    {
+        console.print("COMPARE PASS");
+    }
+}

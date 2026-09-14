@@ -1,0 +1,20 @@
+bool go = true;
+
+block flow
+</
+    record start;
+    console.print("A");
+    if(go)
+    {
+        jump end;
+    }
+    console.print("SHOULD NOT PRINT");
+    record end;
+    console.print("B");
+/>
+
+function main()
+{
+    flow.run();
+    flow.jump(flow.end);
+}

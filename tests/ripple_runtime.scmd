@@ -1,0 +1,20 @@
+function main()
+{
+    u8 a = 100;
+    u8 b = 244;
+    u8 c = 0;
+    c = a + b;
+    if(c == 88 && (c & 8) != 0)
+    {
+        console.print("RIPPLE ADD PASS");
+    }
+
+    c = 0;
+    a = 0;
+    b = 1;
+    c = a - b;
+    if(c == 255)
+    {
+        console.print("RIPPLE SUB PASS");
+    }
+}

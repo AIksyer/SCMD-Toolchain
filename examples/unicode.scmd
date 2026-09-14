@@ -1,0 +1,16 @@
+bool 启用 = true;
+u8 数量 = 9;
+
+function 显示状态()
+{
+    if(启用 && 数量 >= 9)
+    {
+        console.print("中文标识符：PASS");
+    }
+}
+
+function main()
+{
+    console.clear();
+    显示状态();
+}

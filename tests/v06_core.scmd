@@ -1,0 +1,38 @@
+bool 启用 = true;
+u8 计数 = 14;
+
+block 状态
+</
+    record 开始;
+    console.print("BLOCK START");
+
+    record 就绪;
+    console.print("BLOCK READY");
+/>
+
+function main()
+{
+    var 本地 = false;
+    u8 x = 1;
+    x += 1;
+    计数 = 计数 + x;
+
+    console.clear();
+    console.print("SCMD v0.6");
+
+    if(启用 && 计数 >= 16)
+    {
+        本地 = true;
+        console.print("COMPARE PASS");
+        状态.jump(状态.就绪);
+    }
+    else
+    {
+        状态.run();
+    }
+
+    if(本地 == true)
+    {
+        chat.send("unicode identifiers pass");
+    }
+}

@@ -1,0 +1,7 @@
+get "lib.scmd";
+
+function main()
+{
+    console.clear();
+    helper();
+}

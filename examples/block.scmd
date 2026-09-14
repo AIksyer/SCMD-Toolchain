@@ -1,0 +1,24 @@
+bool skip = true;
+
+block flow
+</
+    record start;
+    console.print("block: start");
+
+    if(skip)
+    {
+        jump done;
+    }
+
+    console.print("this line is skipped");
+
+    record done;
+    console.print("block: done");
+/>
+
+function main()
+{
+    console.clear();
+    flow.run();
+    flow.jump(flow.done);
+}

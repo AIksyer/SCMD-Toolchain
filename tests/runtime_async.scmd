@@ -1,0 +1,6 @@
+function main()
+{
+    console.clear();
+    wait 2ticks;
+    console.print("ASYNC_RUNTIME_PASS");
+}

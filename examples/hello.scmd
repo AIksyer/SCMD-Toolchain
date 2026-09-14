@@ -1,0 +1,28 @@
+bool music = true;
+bool debug = false;
+
+function banner()
+{
+    console.print("SCMD IS ALIVE");
+}
+
+function main()
+{
+    console.clear();
+    banner();
+
+    if(music && !debug)
+    {
+        console.print("music path selected");
+    }
+    else
+    {
+        console.print("fallback path selected");
+    }
+
+    music = false;
+    if(music != true)
+    {
+        command.exec("echo generated cfg executed");
+    }
+}

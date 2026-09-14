@@ -1,0 +1,9 @@
+out/
+build/
+.vscode/
+.idea/
+*.cfg
+!runtime/*.cfg
+
+# User-facing build products
+dist/

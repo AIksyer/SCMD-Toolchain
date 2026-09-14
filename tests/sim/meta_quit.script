@@ -1,0 +1,3 @@
+echoln BEFORE_QUIT
+:quit
+echoln AFTER_QUIT_BAD

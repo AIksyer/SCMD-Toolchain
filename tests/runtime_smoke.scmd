@@ -1,0 +1,89 @@
+bool ok = true;
+u8 bx = 0;
+
+block flow
+</
+    record begin;
+    bx = 7;
+    bx += 1;
+    if(bx != 8)
+    {
+        ok = false;
+    }
+    record done;
+/>
+
+function main()
+{
+    u8 a = 100;
+    u8 b = 244;
+    u8 c = a + b;
+    if(c != 88)
+    {
+        ok = false;
+    }
+
+    a = 0;
+    b = 1;
+    c = a - b;
+    if(c != 255)
+    {
+        ok = false;
+    }
+
+    c = 13 * 7;
+    if(c != 91)
+    {
+        ok = false;
+    }
+
+    c = 200 / 7;
+    if(c != 28)
+    {
+        ok = false;
+    }
+
+    c = 200 % 7;
+    if(c != 4)
+    {
+        ok = false;
+    }
+
+    b = 3;
+    c = 1 << b;
+    if(c != 8)
+    {
+        ok = false;
+    }
+
+    c = 128 >> b;
+    if(c != 16)
+    {
+        ok = false;
+    }
+
+    u8 x = 0;
+    while(x < 3)
+    {
+        x += 1;
+    }
+    for(var i = 0; i < 4; i += 1)
+    {
+        x += 1;
+    }
+    if(x != 7)
+    {
+        ok = false;
+    }
+
+    flow.run();
+
+    if(ok)
+    {
+        console.print("RUNTIME_SMOKE_PASS");
+    }
+    else
+    {
+        console.print("RUNTIME_SMOKE_FAIL");
+    }
+}

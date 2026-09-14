@@ -1,0 +1,2 @@
+echo 12345 | setinfo vcs_pipe_value
+vcs_pipe_value

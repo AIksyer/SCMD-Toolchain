@@ -1,0 +1,18 @@
+bool enabled = true;
+
+function main()
+{
+    console.clear();
+    console.print("============================");
+    console.print("SCMD console UI");
+    console.print("============================");
+
+    if(enabled)
+    {
+        console.print("Feature: ON");
+    }
+    else
+    {
+        console.print("Feature: OFF");
+    }
+}

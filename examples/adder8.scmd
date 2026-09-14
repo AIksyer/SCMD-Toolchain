@@ -1,0 +1,23 @@
+function main()
+{
+    u8 a = 255;
+    u8 b = 1;
+    u8 sum = a + b;
+
+    console.clear();
+    console.print("SCMD u8 adder");
+
+    if(sum == 0)
+    {
+        console.print("255 + 1 = 0 (u8 wrap): PASS");
+    }
+
+    a = 200;
+    b = 100;
+    sum = a + b;
+
+    if(sum == 44)
+    {
+        console.print("200 + 100 = 44 (u8 wrap): PASS");
+    }
+}

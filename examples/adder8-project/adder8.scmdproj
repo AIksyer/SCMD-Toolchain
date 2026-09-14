@@ -1,0 +1,23 @@
+project "adder8"
+{
+    entry = "src/main.scmd";
+    output = "build";
+    package = "adder8";
+    bootstrap = true;
+
+    target cs2
+    {
+        console
+        {
+            mode = async;
+            settle = 16ms;
+            tick = 16ms;
+        }
+
+        paging
+        {
+            max_bytes = 4096;
+            max_commands = 40;
+        }
+    }
+}

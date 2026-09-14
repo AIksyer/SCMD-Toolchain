@@ -1,0 +1,8 @@
+u8 a = 0;
+u8 b = 0;
+u8 result = 0;
+
+function add8()
+{
+    result = a + b;
+}

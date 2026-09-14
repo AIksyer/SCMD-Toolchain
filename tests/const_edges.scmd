@@ -1,0 +1,23 @@
+u8 shl8 = 1 << 8;
+u8 shr8 = 255 >> 8;
+u8 div0 = 123 / 0;
+u8 mod0 = 123 % 0;
+u8 wrap = 255 + 2;
+
+function main()
+{
+    bool ok = true;
+    if(shl8 != 0) { ok = false; }
+    if(shr8 != 0) { ok = false; }
+    if(div0 != 0) { ok = false; }
+    if(mod0 != 123) { ok = false; }
+    if(wrap != 1) { ok = false; }
+    if(ok)
+    {
+        console.print("CONST_EDGES_PASS");
+    }
+    else
+    {
+        console.print("CONST_EDGES_FAIL");
+    }
+}

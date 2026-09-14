@@ -1,0 +1,2 @@
+quit
+echoln SHOULD_NOT_RUN

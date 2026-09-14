@@ -1,0 +1,8 @@
+function loop()
+{
+    loop();
+}
+function main()
+{
+    loop();
+}

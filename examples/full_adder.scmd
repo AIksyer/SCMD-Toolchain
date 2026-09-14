@@ -1,0 +1,31 @@
+bool a = false;
+bool b = false;
+bool cin = false;
+bool sum = false;
+bool cout = false;
+
+function full_adder()
+{
+    var propagate = a ^ b;
+    sum = propagate ^ cin;
+    cout = (a && b) || (cin && propagate);
+}
+
+function main()
+{
+    console.clear();
+
+    a = true;
+    b = true;
+    cin = true;
+    full_adder();
+
+    if(sum == true && cout == true)
+    {
+        console.print("FULL ADDER 1+1+1: PASS");
+    }
+    else
+    {
+        console.print("FULL ADDER 1+1+1: FAIL");
+    }
+}

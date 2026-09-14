@@ -1,0 +1,4 @@
+function helper()
+{
+    console.print("MULTIFILE PASS");
+}

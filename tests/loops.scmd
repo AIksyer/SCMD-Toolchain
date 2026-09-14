@@ -1,0 +1,21 @@
+function main()
+{
+    u8 x = 0;
+    while(x < 3)
+    {
+        x += 1;
+    }
+    if(x == 3)
+    {
+        console.print("WHILE PASS");
+    }
+
+    for(var i = 0; i < 4; i += 1)
+    {
+        x += 1;
+    }
+    if(x == 7)
+    {
+        console.print("FOR PASS");
+    }
+}

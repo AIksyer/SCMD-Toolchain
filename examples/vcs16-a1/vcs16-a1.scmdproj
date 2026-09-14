@@ -1,0 +1,23 @@
+project "vcs16_a1"
+{
+    entry = "src/main.scmd";
+    output = "build";
+    package = "vcs16_a1";
+    bootstrap = true;
+
+    target cs2
+    {
+        console
+        {
+            mode = async;
+            settle = 16ms;
+            tick = 16ms;
+        }
+
+        paging
+        {
+            max_bytes = 3072;
+            max_commands = 28;
+        }
+    }
+}
