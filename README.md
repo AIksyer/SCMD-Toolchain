@@ -103,6 +103,8 @@ CS2
 
 大型输出会被拆成多个 CFG page，避免一次向 Console command buffer 塞入过多命令。
 
+CS2 CFG 后端默认开启体积优化，会清理不可达节点、合并安全的连续跳转、去重静态 alias，并缩短编译器生成的内部符号；`wait`、`exec`、动态 alias 和分页安全仍由后端保留。需要调试或对比未优化输出时，可以使用 `scmdc ... --no-opt` 或 `scmdc build project.scmdproj --no-opt`。
+
 ## scmdsim
 
 `scmdsim` 实现了一套和项目目标一致的 Console 环境，用于在游戏外运行和调试生成结果。

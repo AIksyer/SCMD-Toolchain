@@ -43,9 +43,17 @@ scmdc input.scmd -o output.cfg
 --page-bytes N
 --page-commands N
 --exec-prefix PATH
+--no-opt
 ```
 
 项目构建更推荐把这些目标参数写进 `.scmdproj`。
+
+CS2 CFG 后端默认启用优化：会在保持 alias 动态行为、循环、`wait`/`exec` 和分页边界安全的前提下，删除不可达内部节点、合并安全的连续跳转、去重静态节点并缩短编译器生成的符号。需要保留原始 CFG 进行对照或调试时，可使用：
+
+```text
+scmdc input.scmd -o output.cfg --no-opt
+scmdc build project.scmdproj --no-opt
+```
 
 ## 诊断
 

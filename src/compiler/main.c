@@ -14,13 +14,13 @@ static void usage(const char *argv0) {
     printf("scmdc %s\n", SCMD_VERSION);
     printf("\nProject workflow:\n");
     printf("  %s init <directory> [--name NAME]\n", argv0);
-    printf("  %s build <project.scmdproj>\n", argv0);
+    printf("  %s build <project.scmdproj> [--no-opt]\n", argv0);
     printf("\nBytecode workflow:\n");
     printf("  %s pack <cfg-root> -o output.scb [--profile NAME]\n", argv0);
     printf("\nSingle-file workflow:\n");
     printf("  %s <input.scmd> [-o output.cfg] [--console-mode sync|async]\n", argv0);
     printf("     [--console-settle-ms N] [--tick-ms N] [--exec-prefix PATH]\n");
-    printf("     [--page-bytes N] [--page-commands N]\n");
+    printf("     [--page-bytes N] [--page-commands N] [--no-opt]\n");
     printf("\nSimulation is provided by the separate scmdsim tool.\n");
     printf("\nOther:\n");
     printf("  %s --help\n", argv0);
@@ -48,7 +48,7 @@ static char *default_output_path(const char *input) {
 static int compile_single(int argc, char **argv) {
     const char *input = argv[1];
     const char *output_arg = NULL;
-    ScmdCodegenOptions cg_opts = {SCMD_CONSOLE_ASYNC, 16, 16, NULL, 4096, 40, false};
+    ScmdCodegenOptions cg_opts = {SCMD_CONSOLE_ASYNC, 16, 16, NULL, 4096, 40, false, true};
     for (int i = 2; i < argc; ++i) {
         if (strcmp(argv[i], "-o") == 0) {
             if (++i >= argc) { fprintf(stderr, "error: -o requires a path\n"); return 2; }
@@ -91,6 +91,8 @@ static int compile_single(int argc, char **argv) {
                 fprintf(stderr, "error: invalid page command limit '%s' (expected 4..512)\n", argv[i]); return 2;
             }
             cg_opts.page_commands = (size_t)v;
+        } else if (strcmp(argv[i], "--no-opt") == 0) {
+            cg_opts.optimize = false;
         } else {
             fprintf(stderr, "error: unknown argument '%s'\n", argv[i]);
             return 2;
@@ -167,9 +169,12 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "build") == 0) {
-        if (argc != 3) { fprintf(stderr, "error: build expects exactly one .scmdproj file\n"); return 2; }
+        if (argc < 3 || argc > 4 || (argc == 4 && strcmp(argv[3], "--no-opt") != 0)) {
+            fprintf(stderr, "error: build expects <project.scmdproj> [--no-opt]\n"); return 2;
+        }
         ScmdProject project;
         if (!scmd_project_load(argv[2], &project)) return 1;
+        if (argc == 4) project.codegen.optimize = false;
         int ok = scmd_project_build(&project) ? 0 : 1;
         scmd_project_dispose(&project);
         return ok;

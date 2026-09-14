@@ -18,6 +18,7 @@ typedef struct ScmdCodegenOptions {
     size_t page_bytes;
     size_t page_commands;
     bool organized_output;
+    bool optimize;
 } ScmdCodegenOptions;
 
 bool scmd_codegen_cfg(const char *source_path, const ScmdProgram *program, const char *output_path);

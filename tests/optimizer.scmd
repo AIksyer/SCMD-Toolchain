@@ -1,0 +1,16 @@
+function main()
+{
+    u8 value = 3 + 4;
+
+    if(3 + 4 == 7)
+    {
+        console.print("OPTIMIZER_PASS");
+    }
+    else
+    {
+        console.print("OPTIMIZER_FAIL");
+    }
+
+    console.print("TAIL_A");
+    console.print("TAIL_B");
+}

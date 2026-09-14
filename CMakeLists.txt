@@ -177,6 +177,16 @@ if(BUILD_TESTING)
     scmd_compile_test(scmd_adder8 examples/adder8.scmd)
 
     add_test(
+        NAME scmd_optimizer
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/optimizer.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/optimizer-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_optimizer.cmake
+    )
+
+    add_test(
         NAME scmd_missing_if_parentheses_rejected
         COMMAND $<TARGET_FILE:scmdc>
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/invalid_no_paren.scmd
