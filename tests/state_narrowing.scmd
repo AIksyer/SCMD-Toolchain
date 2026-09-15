@@ -1,0 +1,17 @@
+u8 mode = 0;
+u8 src = 255;
+u8 copied = 0;
+
+function main()
+{
+    mode = 5;
+    copied = src;
+    if(mode == 5 && copied == 255)
+    {
+        console.print("STATE_NARROW_PASS");
+    }
+    else
+    {
+        console.print("STATE_NARROW_FAIL");
+    }
+}

@@ -1,0 +1,5 @@
+function main()
+{
+    command.exec("alias boot_value echoln BOOTSTRAP_PASS");
+    command.exec("boot_value");
+}

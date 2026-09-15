@@ -1,0 +1,12 @@
+if(NOT DEFINED SCMDC OR NOT DEFINED SOURCE OR NOT DEFINED OUT)
+    message(FATAL_ERROR "check_array_compound_rejected.cmake missing required -D argument")
+endif()
+execute_process(COMMAND "${SCMDC}" "${SOURCE}" -o "${OUT}" --console-mode sync
+    RESULT_VARIABLE rc OUTPUT_VARIABLE stdout ERROR_VARIABLE stderr)
+if(rc EQUAL 0)
+    message(FATAL_ERROR "compound dynamic array assignment unexpectedly compiled")
+endif()
+set(all "${stdout}\n${stderr}")
+if(NOT all MATCHES "compound array assignment is not implemented yet")
+    message(FATAL_ERROR "unexpected diagnostic\n${all}")
+endif()

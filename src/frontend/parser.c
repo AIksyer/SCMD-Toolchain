@@ -143,6 +143,13 @@ static ScmdExpr *parse_primary(Parser *p) {
             expect(p, TOK_RPAREN, "')'");
             return e;
         }
+        if (accept(p, TOK_LBRACKET)) {
+            ScmdExpr *idx = parse_expr(p);
+            expect(p, TOK_RBRACKET, "']'");
+            ScmdExpr *e = new_expr(EXPR_INDEX, t.line, t.col);
+            if (e) { e->as.index.name = name; e->as.index.index = idx; }
+            return e;
+        }
         ScmdExpr *e = new_expr(EXPR_IDENT, t.line, t.col); if (e) e->as.name = name; return e;
     }
     if (accept(p, TOK_LPAREN)) {
@@ -248,7 +255,7 @@ static ScmdTypeKind token_type(ScmdTokenKind k) {
     return SCMD_TYPE_UNKNOWN;
 }
 
-static ScmdStmt *parse_var_decl(Parser *p, bool expect_semi) {
+static ScmdStmt *parse_var_decl(Parser *p, bool expect_semi, bool is_volatile, bool noopt) {
     ScmdToken kw = p->cur;
     ScmdTypeKind declared = SCMD_TYPE_UNKNOWN;
     if (p->cur.kind == TOK_BOOL || p->cur.kind == TOK_U8) declared = token_type(p->cur.kind);
@@ -263,6 +270,8 @@ static ScmdStmt *parse_var_decl(Parser *p, bool expect_semi) {
     s->as.var_decl.resolved_type = SCMD_TYPE_UNKNOWN;
     s->as.var_decl.name = token_dup(name);
     s->as.var_decl.init = init;
+    s->as.var_decl.is_volatile = is_volatile;
+    s->as.var_decl.noopt = noopt;
     return s;
 }
 
@@ -286,6 +295,24 @@ static ScmdStmt *parse_assign_after_name(Parser *p, ScmdToken name, bool expect_
     s->as.assign.name = token_dup(name);
     s->as.assign.op = assign_op(op.kind);
     s->as.assign.value = parse_expr(p);
+    if (expect_semi) expect(p, TOK_SEMI, "';'");
+    return s;
+}
+
+static ScmdStmt *parse_array_assign_after_name(Parser *p, ScmdToken name, bool expect_semi) {
+    expect(p, TOK_LBRACKET, "'['");
+    ScmdExpr *index = parse_expr(p);
+    expect(p, TOK_RBRACKET, "']'");
+    ScmdToken op = p->cur;
+    if (!is_assign_token(op.kind)) {
+        scmd_error_at(p->path, p->cur.line, p->cur.col, "expected assignment operator after array index");
+        p->errors++;
+    } else next(p);
+    ScmdStmt *s = new_stmt(STMT_ARRAY_ASSIGN, name.line, name.col);
+    s->as.array_assign.name = token_dup(name);
+    s->as.array_assign.index = index;
+    s->as.array_assign.op = assign_op(op.kind);
+    s->as.array_assign.value = parse_expr(p);
     if (expect_semi) expect(p, TOK_SEMI, "';'");
     return s;
 }
@@ -319,10 +346,11 @@ static ScmdStmt *parse_while_stmt(Parser *p) {
 }
 
 static ScmdStmt *parse_for_part(Parser *p) {
-    if (p->cur.kind==TOK_VAR || p->cur.kind==TOK_BOOL || p->cur.kind==TOK_U8) return parse_var_decl(p,false);
+    if (p->cur.kind==TOK_VAR || p->cur.kind==TOK_BOOL || p->cur.kind==TOK_U8) return parse_var_decl(p,false,false,false);
     if (p->cur.kind==TOK_IDENT) {
         ScmdToken name=p->cur; next(p);
         if (is_assign_token(p->cur.kind)) return parse_assign_after_name(p,name,false);
+        if (p->cur.kind==TOK_LBRACKET) return parse_array_assign_after_name(p,name,false);
         scmd_error_at(p->path,name.line,name.col,"for initializer/step must be a declaration or assignment"); p->errors++;
     }
     return NULL;
@@ -427,7 +455,12 @@ static ScmdStmt *parse_call_stmt_after_name(Parser *p, ScmdToken name) {
 }
 
 static ScmdStmt *parse_stmt(Parser *p) {
-    if(p->cur.kind==TOK_VAR || p->cur.kind==TOK_BOOL || p->cur.kind==TOK_U8) return parse_var_decl(p,true);
+    if(p->cur.kind==TOK_VOLATILE) {
+        ScmdToken v=p->cur; next(p);
+        if(p->cur.kind==TOK_VAR || p->cur.kind==TOK_BOOL || p->cur.kind==TOK_U8) return parse_var_decl(p,true,true,false);
+        scmd_error_at(p->path,v.line,v.col,"volatile currently applies to variable declarations"); p->errors++;
+    }
+    if(p->cur.kind==TOK_VAR || p->cur.kind==TOK_BOOL || p->cur.kind==TOK_U8) return parse_var_decl(p,true,false,false);
     if(p->cur.kind==TOK_IF) return parse_if_stmt(p);
     if(p->cur.kind==TOK_WHILE) return parse_while_stmt(p);
     if(p->cur.kind==TOK_FOR) return parse_for_stmt(p);
@@ -455,6 +488,7 @@ static ScmdStmt *parse_stmt(Parser *p) {
     if(p->cur.kind==TOK_IDENT){
         ScmdToken name=p->cur; next(p);
         if(is_assign_token(p->cur.kind)) return parse_assign_after_name(p,name,true);
+        if(p->cur.kind==TOK_LBRACKET) return parse_array_assign_after_name(p,name,true);
         if(p->cur.kind==TOK_LPAREN) return parse_call_stmt_after_name(p,name);
         if(p->cur.kind==TOK_DOT) return parse_qualified_stmt(p,name);
         scmd_error_at(p->path,name.line,name.col,"expected assignment, call, or qualified call after identifier"); p->errors++;
@@ -473,25 +507,49 @@ static bool parse_get(Parser *p, ScmdProgram *prog) {
     ScmdImport **tail=&prog->imports; while(*tail) tail=&(*tail)->next; *tail=im; return true;
 }
 
-static bool parse_global(Parser *p, ScmdProgram *prog) {
+static bool parse_const(Parser *p, ScmdProgram *prog) {
+    ScmdToken kw=p->cur; next(p);
+    ScmdToken name=p->cur; if(!expect(p,TOK_IDENT,"constant name")) return false;
+    expect(p,TOK_ASSIGN,"'='");
+    ScmdExpr *value=parse_expr(p); expect(p,TOK_SEMI,"';'");
+    ScmdConst *c=(ScmdConst*)calloc(1,sizeof(*c)); if(!c) return false;
+    c->name=token_dup(name); c->value=value; c->line=kw.line; c->col=kw.col;
+    ScmdConst **tail=&prog->constants; while(*tail) tail=&(*tail)->next; *tail=c; return true;
+}
+
+static bool parse_global(Parser *p, ScmdProgram *prog, bool is_volatile, bool noopt) {
     ScmdToken kw=p->cur; ScmdTypeKind declared=SCMD_TYPE_UNKNOWN;
     if(p->cur.kind==TOK_BOOL||p->cur.kind==TOK_U8) declared=token_type(p->cur.kind); next(p);
-    ScmdToken name=p->cur; if(!expect(p,TOK_IDENT,"identifier")) return false; expect(p,TOK_ASSIGN,"'='");
+    ScmdToken name=p->cur; if(!expect(p,TOK_IDENT,"identifier")) return false;
+    ScmdExpr *array_len_expr=NULL; bool is_array=false;
+    if(accept(p,TOK_LBRACKET)) { is_array=true; array_len_expr=parse_expr(p); expect(p,TOK_RBRACKET,"']'"); }
+    expect(p,TOK_ASSIGN,"'='");
     ScmdExpr *init=parse_expr(p); expect(p,TOK_SEMI,"';'");
     ScmdGlobal *g=(ScmdGlobal*)calloc(1,sizeof(*g)); if(!g) return false;
-    g->declared_type=declared; g->resolved_type=SCMD_TYPE_UNKNOWN; g->name=token_dup(name); g->init=init; g->line=kw.line; g->col=kw.col;
+    g->declared_type=declared; g->resolved_type=SCMD_TYPE_UNKNOWN; g->name=token_dup(name); g->init=init;
+    g->is_volatile=is_volatile; g->noopt=noopt; g->is_array=is_array; g->array_len_expr=array_len_expr;
+    g->line=kw.line; g->col=kw.col;
     ScmdGlobal **tail=&prog->globals; while(*tail) tail=&(*tail)->next; *tail=g; return true;
 }
 
-static bool parse_function(Parser *p, ScmdProgram *prog) {
+static bool parse_function(Parser *p, ScmdProgram *prog, bool exported, bool resident, bool noopt) {
     ScmdToken kw=p->cur; next(p); ScmdToken name=p->cur; if(!expect(p,TOK_IDENT,"function name")) return false;
     expect(p,TOK_LPAREN,"'('");
     if(p->cur.kind!=TOK_RPAREN){ scmd_error_at(p->path,p->cur.line,p->cur.col,"function parameters are reserved but not implemented yet"); p->errors++; while(p->cur.kind!=TOK_RPAREN&&p->cur.kind!=TOK_EOF) next(p); }
     expect(p,TOK_RPAREN,"')'"); ScmdStmt *body=parse_brace_block(p);
     ScmdFunction *f=(ScmdFunction*)calloc(1,sizeof(*f)); if(!f) return false;
-    f->name=token_dup(name); f->line=kw.line; f->col=kw.col; f->body=body?body->as.block_scope.first:NULL;
+    f->name=token_dup(name); f->exported=exported; f->resident=resident; f->noopt=noopt; f->line=kw.line; f->col=kw.col; f->body=body?body->as.block_scope.first:NULL;
     if(body){body->as.block_scope.first=NULL;free(body);}
     ScmdFunction **tail=&prog->functions; while(*tail) tail=&(*tail)->next; *tail=f; return true;
+}
+
+static bool parse_compile(Parser *p, ScmdProgram *prog) {
+    ScmdToken kw=p->cur; next(p);
+    ScmdStmt *body=parse_brace_block(p);
+    ScmdCompileBlock *cb=(ScmdCompileBlock*)calloc(1,sizeof(*cb)); if(!cb) return false;
+    cb->line=kw.line; cb->col=kw.col; cb->body=body?body->as.block_scope.first:NULL;
+    if(body){body->as.block_scope.first=NULL;free(body);}
+    ScmdCompileBlock **tail=&prog->compile_blocks; while(*tail) tail=&(*tail)->next; *tail=cb; return true;
 }
 
 static bool parse_named_block(Parser *p, ScmdProgram *prog) {
@@ -507,11 +565,40 @@ static bool parse_named_block(Parser *p, ScmdProgram *prog) {
 bool scmd_parse(const char *path,const char *source,ScmdProgram *out_program){
     memset(out_program,0,sizeof(*out_program)); Parser p={0}; p.path=path; scmd_lexer_init(&p.lx,source); p.cur=scmd_lexer_next(&p.lx);
     while(p.cur.kind!=TOK_EOF){
-        if(p.cur.kind==TOK_GET){ if(!parse_get(&p,out_program)){ while(p.cur.kind!=TOK_SEMI&&p.cur.kind!=TOK_EOF) next(&p); accept(&p,TOK_SEMI);} }
-        else if(p.cur.kind==TOK_VAR||p.cur.kind==TOK_BOOL||p.cur.kind==TOK_U8){ if(!parse_global(&p,out_program)){ while(p.cur.kind!=TOK_SEMI&&p.cur.kind!=TOK_EOF) next(&p); accept(&p,TOK_SEMI);} }
-        else if(p.cur.kind==TOK_FUNCTION) parse_function(&p,out_program);
-        else if(p.cur.kind==TOK_BLOCK_KW) parse_named_block(&p,out_program);
-        else { scmd_error_at(path,p.cur.line,p.cur.col,"top level accepts get, var/bool/u8, function, and block"); p.errors++; next(&p); }
+        bool attr_noopt=false,attr_export=false,attr_resident=false;
+        while(p.cur.kind==TOK_AT){
+            ScmdToken at=p.cur; next(&p); ScmdToken a=p.cur;
+            if(a.kind!=TOK_IDENT && a.kind!=TOK_EXPORT && a.kind!=TOK_RESIDENT){scmd_error_at(path,a.line,a.col,"expected attribute name after @");p.errors++;break;}
+            char *name=token_dup(a); next(&p);
+            if(strcmp(name,"noopt")==0)attr_noopt=true;
+            else if(strcmp(name,"export")==0)attr_export=true;
+            else if(strcmp(name,"resident")==0)attr_resident=true;
+            else {scmd_error_at(path,at.line,at.col,"unknown attribute '@%s'",name);p.errors++;}
+            free(name);
+        }
+        if(p.cur.kind==TOK_GET){ if(attr_noopt||attr_export||attr_resident){scmd_error_at(path,p.cur.line,p.cur.col,"attributes do not apply to get");p.errors++;} if(!parse_get(&p,out_program)){ while(p.cur.kind!=TOK_SEMI&&p.cur.kind!=TOK_EOF) next(&p); accept(&p,TOK_SEMI);} }
+        else if(p.cur.kind==TOK_CONST){ if(attr_noopt||attr_export||attr_resident){scmd_error_at(path,p.cur.line,p.cur.col,"attributes do not apply to const");p.errors++;} parse_const(&p,out_program); }
+        else if(p.cur.kind==TOK_COMPILE){ if(attr_noopt||attr_export||attr_resident){scmd_error_at(path,p.cur.line,p.cur.col,"attributes do not apply to compile blocks");p.errors++;} parse_compile(&p,out_program); }
+        else if(p.cur.kind==TOK_VOLATILE){
+            next(&p);
+            if(p.cur.kind==TOK_VAR||p.cur.kind==TOK_BOOL||p.cur.kind==TOK_U8) parse_global(&p,out_program,true,attr_noopt);
+            else {scmd_error_at(path,p.cur.line,p.cur.col,"volatile currently applies to global var/bool/u8 declarations");p.errors++;next(&p);}
+        }
+        else if(p.cur.kind==TOK_VAR||p.cur.kind==TOK_BOOL||p.cur.kind==TOK_U8){ if(attr_export||attr_resident){scmd_error_at(path,p.cur.line,p.cur.col,"@export/@resident apply to functions");p.errors++;} parse_global(&p,out_program,false,attr_noopt); }
+        else if(p.cur.kind==TOK_FUNCTION) parse_function(&p,out_program,attr_export,attr_resident,attr_noopt);
+        else if(p.cur.kind==TOK_EXPORT){
+            ScmdToken ex=p.cur; next(&p); bool resident=attr_resident;
+            if(p.cur.kind==TOK_RESIDENT){resident=true;next(&p);}
+            if(p.cur.kind!=TOK_FUNCTION){scmd_error_at(path,ex.line,ex.col,"export currently requires function or resident function");p.errors++;}
+            else parse_function(&p,out_program,true,resident,attr_noopt);
+        }
+        else if(p.cur.kind==TOK_RESIDENT){
+            ScmdToken rs=p.cur; next(&p);
+            if(p.cur.kind!=TOK_FUNCTION){scmd_error_at(path,rs.line,rs.col,"resident currently requires function");p.errors++;}
+            else parse_function(&p,out_program,attr_export,true,attr_noopt);
+        }
+        else if(p.cur.kind==TOK_BLOCK_KW){ if(attr_noopt||attr_export||attr_resident){scmd_error_at(path,p.cur.line,p.cur.col,"attributes do not apply to named blocks yet");p.errors++;} parse_named_block(&p,out_program); }
+        else { scmd_error_at(path,p.cur.line,p.cur.col,"top level accepts get, const, compile, var/bool/u8 arrays, volatile declarations, function, export/resident function, and block"); p.errors++; next(&p); }
     }
     return p.errors==0;
 }

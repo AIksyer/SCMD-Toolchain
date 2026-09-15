@@ -1,0 +1,19 @@
+; Exercises CALL/RET, 16-bit ALU, dynamic LD8/ST8, compare branch and SYS.
+.memory 64
+.entry start
+start:
+    ldi r0, 40
+    call add_two
+    ldi r1, 4
+    st8 r0, r1, 3
+    ldi r0, 0
+    ld8 r0, r1, 3
+    ldi r1, 42
+    jeq r0, r1, good
+    ldi r0, 0
+good:
+    sys 7
+    halt
+add_two:
+    addi r0, 2
+    ret

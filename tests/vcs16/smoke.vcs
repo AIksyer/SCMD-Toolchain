@@ -1,0 +1,15 @@
+; vCS-16/2 is a CFG-friendly virtual execution architecture, not a hardware CPU model.
+.memory 256
+.entry start
+start:
+    ldi r0, 10
+    ldi r1, 0
+loop:
+    add r1, r0
+    subi r0, 1
+    ldi r2, 0
+    jne r0, r2, loop
+    mov r0, r1
+    sys 2
+    sys 3
+    halt

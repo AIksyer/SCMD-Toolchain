@@ -1,0 +1,24 @@
+const N = 4;
+u8 values[N] = 0;
+
+compile
+{
+    for(var i = 0; i < N; i += 1)
+    {
+        values[i] = i + 1;
+    }
+    assert(N == 4);
+}
+
+function main()
+{
+    u8 i = 2;
+    if(values[0] == 1 && values[3] == 4)
+    {
+        values[i] = 9;
+        if(values[2] == 9)
+        {
+            console.print("COMPTIME_ARRAY_PASS");
+        }
+    }
+}

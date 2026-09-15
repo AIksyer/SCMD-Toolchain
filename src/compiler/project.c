@@ -1,5 +1,12 @@
+#ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#endif
+
 #include "scmd/project.h"
 #include "scmd/common.h"
+#include "scmd/comptime.h"
 #include "scmd/lexer.h"
 #include "scmd/loader.h"
 #include "scmd/sema.h"
@@ -12,10 +19,13 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include <windows.h>
 #define MKDIR(path) _mkdir(path)
 #else
+#include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #define MKDIR(path) mkdir(path,0777)
 #endif
 
@@ -30,6 +40,30 @@ static bool mkdirs(const char*path){char*t=scmd_strdup(path);if(!t)return false;
 if(isalpha((unsigned char)scan[0])&&scan[1]==':')scan+=2;
 #endif
 for(char*p=scan+(*scan=='/'?1:0);*p;++p){if(*p!='/')continue;*p='\0';if(*t&&MKDIR(t)!=0&&errno!=EEXIST){free(t);return false;}*p='/';}if(*t&&MKDIR(t)!=0&&errno!=EEXIST){free(t);return false;}free(t);return true;}
+static bool remove_tree(const char*path){
+#ifdef _WIN32
+    DWORD attr=GetFileAttributesA(path);
+    if(attr==INVALID_FILE_ATTRIBUTES){DWORD e=GetLastError();return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND;}
+    if(!(attr&FILE_ATTRIBUTE_DIRECTORY))return DeleteFileA(path)!=0;
+    if(attr&FILE_ATTRIBUTE_REPARSE_POINT)return RemoveDirectoryA(path)!=0;
+    char*pattern=scmd_format("%s\\*",path);if(!pattern)return false;
+    WIN32_FIND_DATAA fd;HANDLE h=FindFirstFileA(pattern,&fd);free(pattern);
+    if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();return e==ERROR_FILE_NOT_FOUND?RemoveDirectoryA(path)!=0:false;}
+    bool ok=true;
+    do{
+        if(strcmp(fd.cFileName,".")==0||strcmp(fd.cFileName,"..")==0)continue;
+        char*child=scmd_format("%s\\%s",path,fd.cFileName);if(!child){ok=false;break;}
+        if(!remove_tree(child))ok=false;free(child);if(!ok)break;
+    }while(FindNextFileA(h,&fd));
+    FindClose(h);if(!ok)return false;return RemoveDirectoryA(path)!=0;
+#else
+    struct stat st;if(lstat(path,&st)!=0)return errno==ENOENT;
+    if(!S_ISDIR(st.st_mode))return unlink(path)==0;
+    DIR*d=opendir(path);if(!d)return false;bool ok=true;struct dirent*de;
+    while((de=readdir(d))!=NULL){if(strcmp(de->d_name,".")==0||strcmp(de->d_name,"..")==0)continue;char*child=scmd_format("%s/%s",path,de->d_name);if(!child){ok=false;break;}if(!remove_tree(child))ok=false;free(child);if(!ok)break;}
+    closedir(d);if(!ok)return false;return rmdir(path)==0;
+#endif
+}
 static bool write_text(const char*path,const char*text){FILE*f=fopen(path,"wb");if(!f)return false;fputs(text,f);fclose(f);return true;}
 static bool safe_package(const char*s){if(!s||!*s||strstr(s,"..")||strchr(s,':'))return false;for(const unsigned char*p=(const unsigned char*)s;*p;++p)if(!isalnum(*p)&&*p!='_'&&*p!='-'&&*p!='/'&&*p!='\\')return false;return true;}
 
@@ -67,7 +101,7 @@ static bool write_manifest(const char*path,const ScmdProject*p,const ScmdSourceL
     fprintf(f,"{\n  \"format\": 1,\n  \"name\": \"");json_escape(f,p->name);
     fprintf(f,"\",\n  \"package\": \"");json_escape(f,p->package);
     fprintf(f,"\",\n  \"entry\": \"");json_escape(f,p->entry);
-    fprintf(f,"\",\n  \"target\": \"cs2\",\n  \"console\": {\"mode\": \"%s\", \"settle_ms\": %d, \"tick_ms\": %d},\n  \"paging\": {\"max_bytes\": %zu, \"max_commands\": %zu},\n  \"sources\": [",p->codegen.console_mode==SCMD_CONSOLE_ASYNC?"async":"sync",p->codegen.console_settle_ms,p->codegen.tick_ms,p->codegen.page_bytes,p->codegen.page_commands);
+    fprintf(f,"\",\n  \"target\": \"cs2\",\n  \"loading\": {\"mode\": \"demand\", \"mandatory\": true},\n  \"console\": {\"mode\": \"%s\", \"settle_ms\": %d, \"tick_ms\": %d},\n  \"paging\": {\"max_bytes\": %zu, \"max_commands\": %zu},\n  \"sources\": [",p->codegen.console_mode==SCMD_CONSOLE_ASYNC?"async":"sync",p->codegen.console_settle_ms,p->codegen.tick_ms,p->codegen.page_bytes,p->codegen.page_commands);
     for(size_t i=0;i<sources->count;++i){if(i)fputs(", ",f);fputc('"',f);json_escape(f,sources->items[i]);fputc('"',f);}
     fputs("]\n}\n",f);
     bool ok=ferror(f)==0&&fclose(f)==0;
@@ -84,12 +118,18 @@ bool scmd_project_build(const ScmdProject*project){
     entry=join_path(project->base_dir,project->entry);
     if(!entry){fprintf(stderr,"error: out of memory while resolving project entry\n");goto cleanup;}
     if(!scmd_load_program(entry,&program,&sources))goto cleanup;
+    if(!scmd_comptime_run(entry,&program))goto cleanup;
     if(!scmd_sema_check(entry,&program))goto cleanup;
 
     out_root=join_path(project->base_dir,project->output_dir);
     if(!out_root){fprintf(stderr,"error: out of memory while resolving output directory\n");goto cleanup;}
     pkg=join_path(out_root,project->package);
     if(!pkg){fprintf(stderr,"error: out of memory while resolving package directory\n");goto cleanup;}
+    /* Project builds are snapshots, not overlays. Leaving stale lazy/pages files
+     * behind can silently bloat a deploy or expose dead modules after the source
+     * call graph changes. The package path is already validated as a safe
+     * project-relative path, so remove only that exact generated package tree. */
+    if(!remove_tree(pkg)){fprintf(stderr,"error: cannot clean generated package '%s'\n",pkg);goto cleanup;}
     if(!mkdirs(pkg)){fprintf(stderr,"error: cannot create '%s'\n",pkg);goto cleanup;}
 
     internal=join_path(pkg,"entry.cfg");

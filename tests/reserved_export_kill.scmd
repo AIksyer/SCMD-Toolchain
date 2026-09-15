@@ -1,0 +1,8 @@
+export function kill()
+{
+    console.print("BAD");
+}
+
+function main()
+{
+}

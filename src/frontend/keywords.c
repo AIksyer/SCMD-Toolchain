@@ -9,10 +9,15 @@ typedef struct KeywordDef {
 
 static const KeywordDef english_keywords[] = {
     {"get", TOK_GET},
+    {"const", TOK_CONST},
+    {"compile", TOK_COMPILE},
+    {"volatile", TOK_VOLATILE},
     {"var", TOK_VAR},
     {"bool", TOK_BOOL},
     {"u8", TOK_U8},
     {"function", TOK_FUNCTION},
+    {"export", TOK_EXPORT},
+    {"resident", TOK_RESIDENT},
     {"if", TOK_IF},
     {"else", TOK_ELSE},
     {"while", TOK_WHILE},

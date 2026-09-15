@@ -1,0 +1,15 @@
+.memory 64
+.entry start
+start:
+    ldi r0, 40
+    call add_two
+    ldi r1, 4
+    st8 r0, r1, 3
+    ldi r0, 0
+    ld8 r0, r1, 3
+    sys 2
+    sys 3
+    halt
+add_two:
+    addi r0, 2
+    ret

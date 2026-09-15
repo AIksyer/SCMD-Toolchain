@@ -1,0 +1,13 @@
+export function ping()
+{
+    console.print("EXPORT_OK");
+}
+
+function hidden()
+{
+    console.print("HIDDEN_BAD");
+}
+
+function main()
+{
+}

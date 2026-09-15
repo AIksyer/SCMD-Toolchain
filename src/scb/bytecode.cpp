@@ -342,7 +342,13 @@ uint32_t Package::compile_text(std::string_view text, std::string_view block_nam
     std::vector<Instruction> local;
     const std::vector<std::string> commands = split_commands(text);
     local.reserve(commands.size() * 3u + 1u);
-    for (const std::string &cmd : commands) compile_command(*this, local, cmd);
+    for (const std::string &cmd : commands) {
+        if (cmd.size() > SCMD_CS2_MAX_COMMAND_BYTES) {
+            std::cerr << "WARNING: Command too long... ignoring!\n" << cmd << '\n';
+            continue;
+        }
+        compile_command(*this, local, cmd);
+    }
     local.push_back(make_instr(Op::Ret));
     const uint32_t first = static_cast<uint32_t>(code.size());
     code.insert(code.end(), local.begin(), local.end());

@@ -48,8 +48,6 @@ u8 alu_fn = 0;
 
 // ALU scratch
 u8 alu_t0 = 0;
-u8 alu_t1 = 0;
-u8 alu_t2 = 0;
 u8 alu_carry_u8 = 0;
 bool alu_b0 = false;
 bool alu_b1 = false;
@@ -88,28 +86,76 @@ function vcs_reg_read()
     bus_lo = 0;
     bus_hi = 0;
 
-    if(reg_sel == 0) { bus_lo = r0_lo; bus_hi = r0_hi; }
-    else if(reg_sel == 1) { bus_lo = r1_lo; bus_hi = r1_hi; }
-    else if(reg_sel == 2) { bus_lo = r2_lo; bus_hi = r2_hi; }
-    else if(reg_sel == 3) { bus_lo = r3_lo; bus_hi = r3_hi; }
-    else if(reg_sel == 4) { bus_lo = r4_lo; bus_hi = r4_hi; }
-    else if(reg_sel == 5) { bus_lo = r5_lo; bus_hi = r5_hi; }
-    else if(reg_sel == 6) { bus_lo = r6_lo; bus_hi = r6_hi; }
-    else if(reg_sel == 7) { bus_lo = r7_lo; bus_hi = r7_hi; }
-    else { fault = true; }
+    // Decode the 3-bit register selector as a tree instead of eight full u8
+    // equality tests. The high-bit guard preserves A1's invalid-selector fault.
+    if((reg_sel & 0xF8) != 0)
+    {
+        fault = true;
+        return;
+    }
+
+    if((reg_sel & 4) == 0)
+    {
+        if((reg_sel & 2) == 0)
+        {
+            if((reg_sel & 1) == 0) { bus_lo = r0_lo; bus_hi = r0_hi; }
+            else { bus_lo = r1_lo; bus_hi = r1_hi; }
+        }
+        else
+        {
+            if((reg_sel & 1) == 0) { bus_lo = r2_lo; bus_hi = r2_hi; }
+            else { bus_lo = r3_lo; bus_hi = r3_hi; }
+        }
+    }
+    else
+    {
+        if((reg_sel & 2) == 0)
+        {
+            if((reg_sel & 1) == 0) { bus_lo = r4_lo; bus_hi = r4_hi; }
+            else { bus_lo = r5_lo; bus_hi = r5_hi; }
+        }
+        else
+        {
+            if((reg_sel & 1) == 0) { bus_lo = r6_lo; bus_hi = r6_hi; }
+            else { bus_lo = r7_lo; bus_hi = r7_hi; }
+        }
+    }
 }
 
 function vcs_reg_write()
 {
-    if(reg_sel == 0) { r0_lo = bus_lo; r0_hi = bus_hi; }
-    else if(reg_sel == 1) { r1_lo = bus_lo; r1_hi = bus_hi; }
-    else if(reg_sel == 2) { r2_lo = bus_lo; r2_hi = bus_hi; }
-    else if(reg_sel == 3) { r3_lo = bus_lo; r3_hi = bus_hi; }
-    else if(reg_sel == 4) { r4_lo = bus_lo; r4_hi = bus_hi; }
-    else if(reg_sel == 5) { r5_lo = bus_lo; r5_hi = bus_hi; }
-    else if(reg_sel == 6) { r6_lo = bus_lo; r6_hi = bus_hi; }
-    else if(reg_sel == 7) { r7_lo = bus_lo; r7_hi = bus_hi; }
-    else { fault = true; }
+    if((reg_sel & 0xF8) != 0)
+    {
+        fault = true;
+        return;
+    }
+
+    if((reg_sel & 4) == 0)
+    {
+        if((reg_sel & 2) == 0)
+        {
+            if((reg_sel & 1) == 0) { r0_lo = bus_lo; r0_hi = bus_hi; }
+            else { r1_lo = bus_lo; r1_hi = bus_hi; }
+        }
+        else
+        {
+            if((reg_sel & 1) == 0) { r2_lo = bus_lo; r2_hi = bus_hi; }
+            else { r3_lo = bus_lo; r3_hi = bus_hi; }
+        }
+    }
+    else
+    {
+        if((reg_sel & 2) == 0)
+        {
+            if((reg_sel & 1) == 0) { r4_lo = bus_lo; r4_hi = bus_hi; }
+            else { r5_lo = bus_lo; r5_hi = bus_hi; }
+        }
+        else
+        {
+            if((reg_sel & 1) == 0) { r6_lo = bus_lo; r6_hi = bus_hi; }
+            else { r7_lo = bus_lo; r7_hi = bus_hi; }
+        }
+    }
 }
 
 function vcs_flags_zn()

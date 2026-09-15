@@ -1,0 +1,55 @@
+const SMALL = 3;
+const LARGE = 64;
+
+u8 small_values[SMALL] = 0;
+bool small_flags[SMALL] = false;
+u8 large_values[LARGE] = 0;
+
+compile
+{
+    small_values[0] = 11;
+    small_values[1] = 22;
+    small_values[2] = 33;
+    small_flags[1] = true;
+
+    for(var i = 0; i < LARGE; i += 1)
+    {
+        large_values[i] = i + 1;
+    }
+}
+
+function main()
+{
+    u8 i = 1;
+    u8 value = 0;
+    bool flag = false;
+
+    value = small_values[i];
+    flag = small_flags[i];
+    if(value != 22 || !flag)
+    {
+        console.print("ARRAY_LOAD_FAIL_SMALL");
+        return;
+    }
+
+    i = 3;
+    value = 99;
+    flag = true;
+    value = small_values[i];
+    flag = small_flags[i];
+    if(value != 0 || flag)
+    {
+        console.print("ARRAY_LOAD_FAIL_OOB");
+        return;
+    }
+
+    i = 37;
+    value = large_values[i];
+    if(value != 38)
+    {
+        console.print("ARRAY_LOAD_FAIL_LARGE");
+        return;
+    }
+
+    console.print("ARRAY_LOAD_CONTROLFLOW_PASS");
+}

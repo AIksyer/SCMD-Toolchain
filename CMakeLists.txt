@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(scmdc VERSION 0.10.0 LANGUAGES C CXX)
+project(scmdc VERSION 0.11.1 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -33,6 +33,7 @@ add_library(scmd_core STATIC
     src/frontend/lexer.c
     src/frontend/keywords.c
     src/frontend/parser.c
+    src/frontend/comptime.c
     src/frontend/sema.c
     src/compiler/codegen.c
     src/compiler/loader.c
@@ -47,9 +48,33 @@ target_include_directories(scmd_bytecode_core PUBLIC include src/scb)
 
 add_library(scmd_sim_core STATIC
     src/simulator/console_sim.cpp
+    src/simulator/sos_sim.cpp
 )
 target_include_directories(scmd_sim_core PUBLIC include src/scb)
 target_link_libraries(scmd_sim_core PUBLIC scmd_bytecode_core)
+
+# vCS-16/2 is a CFG-friendly virtual execution architecture for host-side
+# tooling and downstream runtimes. Keep the implementation in a library; CLI tools are
+# deliberately thin front-ends over this API.
+add_library(vcs16 STATIC
+    src/vcs16/vcs16.cpp
+)
+target_include_directories(vcs16 PUBLIC include)
+
+add_library(vcs16_scmd STATIC
+    src/vcs16/scmd_codegen.cpp
+)
+target_include_directories(vcs16_scmd PUBLIC include)
+target_link_libraries(vcs16_scmd PUBLIC vcs16)
+
+add_executable(vcs16as tools/vcs16/vcs16as.cpp)
+target_link_libraries(vcs16as PRIVATE vcs16)
+add_executable(vcs16run tools/vcs16/vcs16run.cpp)
+target_link_libraries(vcs16run PRIVATE vcs16)
+add_executable(vcs16dump tools/vcs16/vcs16dump.cpp)
+target_link_libraries(vcs16dump PRIVATE vcs16)
+add_executable(vcs16scmd tools/vcs16/vcs16scmd.cpp)
+target_link_libraries(vcs16scmd PRIVATE vcs16_scmd)
 
 # windows.h defines min/max macros unless NOMINMAX is set. They collide with
 # std::numeric_limits<T>::max() and other standard C++ APIs. Keep those legacy
@@ -68,7 +93,7 @@ target_link_libraries(scmdsim PRIVATE scmd_sim_core)
 # artifact remain in the CMake binary tree under out/. The per-config
 # properties also make this deterministic if someone uses a multi-config
 # generator instead of the supported Ninja presets.
-foreach(tool scmdc scmdsim)
+foreach(tool scmdc scmdsim vcs16as vcs16run vcs16dump vcs16scmd)
     set_target_properties(${tool} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${SCMD_DIST_DIR}"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${SCMD_DIST_DIR}"
@@ -80,7 +105,8 @@ endforeach()
 
 # An explicit aggregate target makes the intended public build products clear
 # and lets build scripts fail if either tool cannot be produced.
-add_custom_target(scmd_tools ALL DEPENDS scmdc scmdsim)
+add_custom_target(scmd_tools ALL DEPENDS scmdc scmdsim vcs16as vcs16run vcs16dump vcs16scmd)
+
 
 function(scmd_apply_warnings target)
     if(MSVC)
@@ -96,7 +122,7 @@ function(scmd_apply_warnings target)
     endif()
 endfunction()
 
-foreach(target scmd_core scmd_bytecode_core scmd_sim_core scmdc scmdsim)
+foreach(target scmd_core scmd_bytecode_core scmd_sim_core vcs16 vcs16_scmd scmdc scmdsim vcs16as vcs16run vcs16dump vcs16scmd)
     scmd_apply_warnings(${target})
 endforeach()
 
@@ -104,21 +130,64 @@ if(SCMD_ENABLE_SANITIZERS)
     if(MSVC)
         message(FATAL_ERROR "SCMD_ENABLE_SANITIZERS currently requires Clang/GCC-style flags")
     endif()
-    foreach(target scmd_core scmd_bytecode_core scmd_sim_core scmdc scmdsim)
+    foreach(target scmd_core scmd_bytecode_core scmd_sim_core vcs16 vcs16_scmd scmdc scmdsim vcs16as vcs16run vcs16dump vcs16scmd)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     endforeach()
     target_link_options(scmdc PRIVATE -fsanitize=address,undefined)
     target_link_options(scmdsim PRIVATE -fsanitize=address,undefined)
+    target_link_options(vcs16as PRIVATE -fsanitize=address,undefined)
+    target_link_options(vcs16run PRIVATE -fsanitize=address,undefined)
+    target_link_options(vcs16dump PRIVATE -fsanitize=address,undefined)
+    target_link_options(vcs16scmd PRIVATE -fsanitize=address,undefined)
 endif()
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT SCMD_IPO_SUPPORTED OUTPUT SCMD_IPO_ERROR)
 if(SCMD_IPO_SUPPORTED)
-    set_property(TARGET scmdc scmdsim scmd_core scmd_bytecode_core scmd_sim_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set_property(TARGET scmdc scmdsim vcs16as vcs16run vcs16dump vcs16scmd scmd_core scmd_bytecode_core scmd_sim_core vcs16 vcs16_scmd PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(vcs16_c_api_test tests/vcs16/c_api.c)
+    target_link_libraries(vcs16_c_api_test PRIVATE vcs16)
+    add_dependencies(scmd_tools vcs16_c_api_test)
+    set_target_properties(vcs16_c_api_test PROPERTIES LINKER_LANGUAGE CXX)
+    scmd_apply_warnings(vcs16_c_api_test)
+    if(SCMD_ENABLE_SANITIZERS)
+        target_compile_options(vcs16_c_api_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(vcs16_c_api_test PRIVATE -fsanitize=address,undefined)
+    endif()
+
+    add_test(NAME vcs16_c_api COMMAND $<TARGET_FILE:vcs16_c_api_test>)
+    set_tests_properties(vcs16_c_api PROPERTIES PASS_REGULAR_EXPRESSION "VCS16_C_API_PASS")
+
+    add_test(NAME vcs16_v2_smoke
+        COMMAND $<TARGET_FILE:vcs16run> ${CMAKE_CURRENT_SOURCE_DIR}/tests/vcs16/smoke.vcs)
+    set_tests_properties(vcs16_v2_smoke PROPERTIES PASS_REGULAR_EXPRESSION "55")
+
+    add_test(NAME vcs16_vxe_roundtrip
+        COMMAND ${CMAKE_COMMAND}
+                -DAS=$<TARGET_FILE:vcs16as>
+                -DRUN=$<TARGET_FILE:vcs16run>
+                -DDUMP=$<TARGET_FILE:vcs16dump>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/vcs16/smoke.vcs
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/vcs16-vxe-roundtrip
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_vcs16_vxe_roundtrip.cmake)
+
+    add_test(NAME vcs16_v2_call_memory
+        COMMAND $<TARGET_FILE:vcs16run> ${CMAKE_CURRENT_SOURCE_DIR}/tests/vcs16/call_memory.vcs)
+    set_tests_properties(vcs16_v2_call_memory PROPERTIES PASS_REGULAR_EXPRESSION "42")
+
+    add_test(NAME vcs16_v2_scmd_aot
+        COMMAND ${CMAKE_COMMAND}
+                -DVCS16SCMD=$<TARGET_FILE:vcs16scmd>
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/vcs16/aot_all.vcs
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/vcs16-scmd-aot-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_vcs16_scmd_aot.cmake)
+
     add_test(NAME scmdc_cli_help COMMAND $<TARGET_FILE:scmdc> --help)
     set_tests_properties(scmdc_cli_help PROPERTIES
         PASS_REGULAR_EXPRESSION "separate scmdsim tool"
@@ -149,11 +218,36 @@ if(BUILD_TESTING)
     set_tests_properties(scmdsim_profile_cs2_2026 PROPERTIES PASS_REGULAR_EXPRESSION "CASE_PASS")
 
     add_test(
+        NAME scmdsim_sos_compat
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DROOT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/cfg
+                -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/sos.script
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_sos_compat.cmake
+    )
+
+    add_test(
+        NAME scmdsim_echo_ui
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DROOT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/cfg
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_echo_ui.cmake
+    )
+
+    add_test(
         NAME scmdsim_unknown_profile_rejected
         COMMAND ${CMAKE_COMMAND}
                 -DSCMDSIM=$<TARGET_FILE:scmdsim>
                 -DROOT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/cfg
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_bad_profile.cmake
+    )
+
+    add_test(
+        NAME scmdsim_cs2_command_length
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DROOT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/cfg
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_sim_command_limit.cmake
     )
 
     function(scmd_compile_test name source)
@@ -184,6 +278,56 @@ if(BUILD_TESTING)
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/optimizer.scmd
                 -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/optimizer-check
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_optimizer.cmake
+    )
+
+    add_test(
+        NAME scmd_cs2_command_length
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/optimizer_command_limit.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/command-limit-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_command_limit.cmake
+    )
+
+    add_test(
+        NAME scmd_state_storage_narrowing
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/state_narrowing.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/state-narrowing-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_state_narrowing.cmake
+    )
+
+    add_test(
+        NAME scmd_mandatory_function_demand_loading
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/lazy_functions.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/lazy-function-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_lazy_functions.cmake
+    )
+
+    add_test(
+        NAME scmd_resident_function
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_function.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/resident-function-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_resident_function.cmake
+    )
+
+    add_test(
+        NAME scmd_static_main_bootstrap
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/static_main_bootstrap.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/static-main-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_static_main_bootstrap.cmake
     )
 
     add_test(
@@ -219,14 +363,54 @@ if(BUILD_TESTING)
 
     add_test(
         NAME sim_pipe_is_literal
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DROOT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/cfg
+                -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/pipe.script
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_pipe_literal.cmake
+    )
+
+    add_test(
+        NAME scmd_export_function
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/export_function.scmd
+                -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/tests/export_function.script
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/export-function-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_export_function.cmake
+    )
+
+    add_test(
+        NAME scmd_export_reserved_kill_rejected
+        COMMAND $<TARGET_FILE:scmdc>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/reserved_export_kill.scmd
+                -o ${CMAKE_CURRENT_BINARY_DIR}/reserved-kill.cfg
+                --console-mode sync
+    )
+    set_tests_properties(scmd_export_reserved_kill_rejected PROPERTIES WILL_FAIL TRUE)
+
+    add_test(
+        NAME scmd_export_reserved_version_rejected
+        COMMAND $<TARGET_FILE:scmdc>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/reserved_export_version.scmd
+                -o ${CMAKE_CURRENT_BINARY_DIR}/reserved-version.cfg
+                --console-mode sync
+    )
+    set_tests_properties(scmd_export_reserved_version_rejected PROPERTIES WILL_FAIL TRUE)
+
+    add_test(
+        NAME sim_cs2_builtin_precedes_alias
         COMMAND $<TARGET_FILE:scmdsim>
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/cfg
-                --script ${CMAKE_CURRENT_SOURCE_DIR}/tests/sim/pipe.script
+                --exec builtin_collision
                 --no-interactive --no-engine-messages --no-ansi
     )
-    set_tests_properties(sim_pipe_is_literal PROPERTIES
-        PASS_REGULAR_EXPRESSION "12345 \\| setinfo vcs_pipe_value"
+    set_tests_properties(sim_cs2_builtin_precedes_alias PROPERTIES
+        PASS_REGULAR_EXPRESSION "BUILTIN_COLLISION_OK"
+        FAIL_REGULAR_EXPRESSION "BAD_KILL_ALIAS|BAD_HELP_ALIAS|BAD_VERSION_ALIAS"
     )
+
 
     add_test(
         NAME sim_async_scheduler
@@ -403,6 +587,28 @@ if(BUILD_TESTING)
     )
 
     add_test(
+        NAME scmd_project_clean_rebuild
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/project-clean-rebuild
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_project_clean_rebuild.cmake
+    )
+
+    add_test(
+        NAME scmd_array_load_controlflow
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMD=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/array_load_controlflow.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/array-load-controlflow
+                -DNAME=array_load_controlflow
+                -DEXPECT=ARRAY_LOAD_CONTROLFLOW_PASS
+                -DMODE=sync
+                -DMAX_COMMANDS=2000000
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_compiled_sim.cmake
+    )
+
+    add_test(
         NAME scmd_arithmetic_matrix
         COMMAND ${CMAKE_COMMAND}
                 -DSCMD=$<TARGET_FILE:scmdc>
@@ -432,7 +638,13 @@ if(BUILD_TESTING)
     set_tests_properties(vcs16_a1_simulator_bringup PROPERTIES TIMEOUT 20)
 endif()
 
-install(TARGETS scmdc scmdsim RUNTIME DESTINATION bin)
+install(TARGETS scmdc scmdsim vcs16as vcs16run vcs16dump vcs16scmd
+    RUNTIME DESTINATION bin)
+install(TARGETS vcs16 vcs16_scmd
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin)
+install(DIRECTORY include/vcs16 DESTINATION include)
 
 if(BUILD_TESTING)
     add_test(
@@ -528,6 +740,50 @@ if(BUILD_TESTING)
                 -DSCMDSIM=$<TARGET_FILE:scmdsim>
                 -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/lazy-cache-test
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/lazy_cache.cmake
+    )
+
+    add_test(
+        NAME scmd_comptime_arrays
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMD=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/comptime_arrays.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/comptime-arrays
+                -DNAME=comptime_arrays
+                -DEXPECT=COMPTIME_ARRAY_PASS
+                -DMODE=sync
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_compiled_sim.cmake
+    )
+
+    add_test(
+        NAME scmd_volatile_noopt
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMD=$<TARGET_FILE:scmdc>
+                -DSCMDSIM=$<TARGET_FILE:scmdsim>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/volatile_noopt.scmd
+                -DOUTDIR=${CMAKE_CURRENT_BINARY_DIR}/volatile-noopt
+                -DNAME=volatile_noopt
+                -DEXPECT=VOLATILE_NOOPT_PASS
+                -DMODE=sync
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_compiled_sim.cmake
+    )
+
+    add_test(
+        NAME scmd_volatile_noopt_shape
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/volatile_noopt.scmd
+                -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/volatile-noopt-shape
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_volatile_noopt_shape.cmake
+    )
+
+    add_test(
+        NAME scmd_array_compound_rejected
+        COMMAND ${CMAKE_COMMAND}
+                -DSCMDC=$<TARGET_FILE:scmdc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/array_compound_invalid.scmd
+                -DOUT=${CMAKE_CURRENT_BINARY_DIR}/array-compound-invalid.cfg
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_array_compound_rejected.cmake
     )
 
 endif()

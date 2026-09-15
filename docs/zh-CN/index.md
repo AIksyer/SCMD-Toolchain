@@ -2,7 +2,7 @@
 
 SCMD（Shortcut Command）是一门以 Source / CS2 Console CFG 为主要目标的编译语言项目。
 
-当前文档对应 **SCMD Toolchain 0.10.0**（`scmdc` + `scmdsim`），SCB 字节码 ABI 为 **1**。
+当前文档对应 **SCMD Toolchain 0.11.1**（`scmdc` + `scmdsim`），SCB 字节码 ABI 为 **1**。
 
 ## 阅读顺序
 
@@ -16,6 +16,7 @@ SCMD（Shortcut Command）是一门以 Source / CS2 Console CFG 为主要目标�
 8. [编译器与诊断](compiler.md)
 9. [当前状态与限制](status.md)
 10. [测试](testing.md)
+11. [vCS-16/2 虚拟执行架构](vcs16-v2.md)
 
 ## 设计原则
 

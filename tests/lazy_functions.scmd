@@ -1,0 +1,17 @@
+function helper()
+{
+    console.print("LAZY_HELPER_PASS");
+    return;
+}
+
+function screen()
+{
+    console.print("LAZY_SCREEN_BEGIN");
+    helper();
+    console.print("LAZY_SCREEN_END");
+}
+
+function main()
+{
+    screen();
+}

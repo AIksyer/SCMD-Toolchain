@@ -12,10 +12,15 @@ typedef enum ScmdTokenKind {
 
     /* keywords */
     TOK_GET,
+    TOK_CONST,
+    TOK_COMPILE,
+    TOK_VOLATILE,
     TOK_VAR,
     TOK_BOOL,
     TOK_U8,
     TOK_FUNCTION,
+    TOK_EXPORT,
+    TOK_RESIDENT,
     TOK_IF,
     TOK_ELSE,
     TOK_WHILE,
@@ -33,12 +38,15 @@ typedef enum ScmdTokenKind {
     TOK_RPAREN,
     TOK_LBRACE,
     TOK_RBRACE,
+    TOK_LBRACKET,
+    TOK_RBRACKET,
     TOK_BLOCK_OPEN,   /* </ */
     TOK_BLOCK_CLOSE,  /* /> */
     TOK_SEMI,
     TOK_COMMA,
     TOK_DOT,
     TOK_COLON,
+    TOK_AT,
 
     /* operators */
     TOK_ASSIGN,

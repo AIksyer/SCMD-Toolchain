@@ -12,6 +12,10 @@ static void expr_dispose(ScmdExpr *expr) {
         case EXPR_IDENT:
             free(expr->as.name);
             break;
+        case EXPR_INDEX:
+            free(expr->as.index.name);
+            expr_dispose(expr->as.index.index);
+            break;
         case EXPR_CALL:
             free(expr->as.call.name);
             for (size_t i = 0; i < expr->as.call.arg_count; ++i) expr_dispose(expr->as.call.args[i]);
@@ -39,6 +43,11 @@ static void stmt_list_dispose(ScmdStmt *stmt) {
             case STMT_ASSIGN:
                 free(stmt->as.assign.name);
                 expr_dispose(stmt->as.assign.value);
+                break;
+            case STMT_ARRAY_ASSIGN:
+                free(stmt->as.array_assign.name);
+                expr_dispose(stmt->as.array_assign.index);
+                expr_dispose(stmt->as.array_assign.value);
                 break;
             case STMT_IF:
                 expr_dispose(stmt->as.if_stmt.cond);
@@ -99,11 +108,22 @@ void scmd_program_dispose(ScmdProgram *program) {
         im = next;
     }
 
+    ScmdConst *c = program->constants;
+    while (c) {
+        ScmdConst *next = c->next;
+        free(c->name);
+        expr_dispose(c->value);
+        free(c);
+        c = next;
+    }
+
     ScmdGlobal *g = program->globals;
     while (g) {
         ScmdGlobal *next = g->next;
         free(g->name);
         expr_dispose(g->init);
+        expr_dispose(g->array_len_expr);
+        free(g->array_init_values);
         free(g);
         g = next;
     }
@@ -124,6 +144,14 @@ void scmd_program_dispose(ScmdProgram *program) {
         stmt_list_dispose(block->body);
         free(block);
         block = next;
+    }
+
+    ScmdCompileBlock *cb = program->compile_blocks;
+    while (cb) {
+        ScmdCompileBlock *next = cb->next;
+        stmt_list_dispose(cb->body);
+        free(cb);
+        cb = next;
     }
 
     memset(program, 0, sizeof(*program));

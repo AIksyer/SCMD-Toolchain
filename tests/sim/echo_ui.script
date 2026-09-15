@@ -1,0 +1,2 @@
+echo ECHO_PREFIX_TEST
+echoln ECHOLN_RAW_TEST

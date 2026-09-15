@@ -105,6 +105,14 @@ static void visited_add(LoadCtx *ctx, char *path) {
     ctx->visited[ctx->visited_len++] = path;
 }
 
+
+static void append_constants(ScmdProgram *dst, ScmdConst *src) {
+    if (!src) return;
+    ScmdConst **tail = &dst->constants;
+    while (*tail) tail = &(*tail)->next;
+    *tail = src;
+}
+
 static void append_globals(ScmdProgram *dst, ScmdGlobal *src) {
     if (!src) return;
     ScmdGlobal **tail = &dst->globals;
@@ -122,6 +130,14 @@ static void append_functions(ScmdProgram *dst, ScmdFunction *src) {
 static void append_blocks(ScmdProgram *dst, ScmdBlock *src) {
     if (!src) return;
     ScmdBlock **tail = &dst->blocks;
+    while (*tail) tail = &(*tail)->next;
+    *tail = src;
+}
+
+
+static void append_compile_blocks(ScmdProgram *dst, ScmdCompileBlock *src) {
+    if (!src) return;
+    ScmdCompileBlock **tail = &dst->compile_blocks;
     while (*tail) tail = &(*tail)->next;
     *tail = src;
 }
@@ -157,12 +173,16 @@ static bool load_one(LoadCtx *ctx, const char *path) {
         free(child);
     }
 
+    append_constants(&ctx->program, unit.constants);
     append_globals(&ctx->program, unit.globals);
     append_functions(&ctx->program, unit.functions);
     append_blocks(&ctx->program, unit.blocks);
+    append_compile_blocks(&ctx->program, unit.compile_blocks);
+    unit.constants = NULL;
     unit.globals = NULL;
     unit.functions = NULL;
     unit.blocks = NULL;
+    unit.compile_blocks = NULL;
     scmd_program_dispose(&unit); /* imports are loader-only metadata */
     return true;
 }

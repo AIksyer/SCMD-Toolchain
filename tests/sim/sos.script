@@ -1,0 +1,30 @@
+# math_float mult + float32 storage
+snd_sos_set_operator_field test_enum_opvar math_test input1 0 7;snd_sos_set_operator_field test_enum_opvar math_test input2 0 4;snd_sos_resolve_execute_operator test_enum_opvar math_test;snd_sos_print_operator_stack_operator test_enum_opvar math_test
+
+# Valve-style same-stack local opvar write/read
+snd_sos_resolve_execute_operator update_test_opvar update_test_local_opvar_set;snd_sos_resolve_execute_operator update_test_opvar update_test_local_opvar_get;snd_sos_print_operator_stack_operator update_test_opvar update_test_local_opvar_get
+
+# Deferred snd_opvar_set string patches: point the soundscape getter at diagnostic RAM.
+ent_create snd_opvar_set { "stackName" "soundscape_opvar_percentage" "operatorName" "get_opvar" "opvarName" "input_stack_name" "opvarValueType" "1" "opvarValueString" "diagnostic_globals" "opvarIndex" "0" "setOnSpawn" "1" };ent_create snd_opvar_set { "stackName" "soundscape_opvar_percentage" "operatorName" "get_opvar" "opvarName" "input_operator_name" "opvarValueType" "1" "opvarValueString" "test_opvars" "opvarIndex" "0" "setOnSpawn" "1" };ent_create snd_opvar_set { "stackName" "soundscape_opvar_percentage" "operatorName" "public" "opvarName" "opvar_name" "opvarValueType" "1" "opvarValueString" "test_array_max_value" "opvarIndex" "0" "setOnSpawn" "1" }
+snd_sos_set_operator_field soundscape_opvar_percentage get_opvar input_index 0 2;snd_sos_resolve_execute_operator soundscape_opvar_percentage has_opvar;snd_sos_resolve_execute_operator soundscape_opvar_percentage get_opvar;snd_sos_set_operator_field soundscape_opvar_percentage filter_opvar input_reset 0 1;snd_sos_resolve_execute_operator soundscape_opvar_percentage filter_opvar;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_x1 0 0;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_y1 0 0;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_x2 0 21845;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_y2 0 21845;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_x3 0 43690;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_y3 0 43690;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_x4 0 65535;snd_sos_set_operator_field soundscape_opvar_percentage public remap_opvar_y4 0 65535;snd_sos_set_operator_field soundscape_opvar_percentage remap_opvar input_scale_X 0 1;snd_sos_set_operator_field soundscape_opvar_percentage remap_opvar input_scale_Y 0 2;snd_sos_resolve_execute_operator soundscape_opvar_percentage remap_opvar;snd_sos_print_operator_stack_operator soundscape_opvar_percentage get_opvar;snd_sos_print_operator_stack_operator soundscape_opvar_percentage remap_opvar
+
+# Reproduce observed write-context asymmetry: soundscape -> diagnostic fails, update_test_opvar -> diagnostic succeeds.
+ent_create snd_opvar_set { "stackName" "soundscape_opvar_switch" "operatorName" "set_output_float" "opvarName" "input_stack_name" "opvarValueType" "1" "opvarValueString" "diagnostic_globals" "opvarIndex" "0" "setOnSpawn" "1" };ent_create snd_opvar_set { "stackName" "soundscape_opvar_switch" "operatorName" "set_output_float" "opvarName" "input_operator_name" "opvarValueType" "1" "opvarValueString" "test_opvars" "opvarIndex" "0" "setOnSpawn" "1" };ent_create snd_opvar_set { "stackName" "soundscape_opvar_switch" "operatorName" "set_output_float" "opvarName" "input_field_name" "opvarValueType" "1" "opvarValueString" "test_float" "opvarIndex" "0" "setOnSpawn" "1" }
+snd_sos_set_operator_field soundscape_opvar_switch opvar_switch output 0 240;snd_sos_resolve_execute_operator soundscape_opvar_switch set_output_float;snd_sos_print_operator_stack_operator soundscape_opvar_switch set_output_float
+snd_sos_set_operator_field update_test_opvar update_test_opvar_set input 0 240;snd_sos_resolve_execute_operator update_test_opvar update_test_opvar_set;snd_sos_print_operator_stack_operator update_test_opvar update_test_opvar_set;snd_sos_print_operator_stack_operator diagnostic_globals test_opvars
+
+# Runtime import_stack mutation changes metadata only; flattened child remains the parse-time tree.
+ent_create snd_opvar_set { "stackName" "update_test_simple_nest_import_op2" "operatorName" "update_test_import_op2" "opvarName" "import_stack" "opvarValueType" "1" "opvarValueString" "update_test_opvar" "opvarIndex" "0" "setOnSpawn" "1" }
+snd_sos_print_operator_stack update_test_simple_nest_import_op2
+
+# Numeric ConVar bridge.
+snd_op_test_convar 321;snd_sos_resolve_execute_operator update_test_convar update_test_convar;snd_sos_print_operator_stack_operator update_test_convar update_test_convar
+snd_sos_set_operator_field update_test_convar update_test_convar2 input 0 0.42;snd_sos_resolve_execute_operator update_test_convar update_test_convar2;snd_musicvolume
+
+# SOS fields use float32-like precision around 2^24.
+snd_sos_set_operator_field update_test_simple_nest_import_op2 public import2_float 0 16777216;snd_sos_set_operator_field update_test_simple_nest_import_op2 update_test_simple_nest_import_op2_OPER input2 0 1;snd_sos_resolve_execute_operator update_test_simple_nest_import_op2 update_test_simple_nest_import_op2_OPER;snd_sos_print_operator_stack_operator update_test_simple_nest_import_op2 update_test_simple_nest_import_op2_OPER
+
+# Persistent snd_opvar_set entity: runtime-selected indexed STORE is deferred until the next simulator drain.
+ent_create snd_opvar_set { "targetName" "scmd_ram_writer" "stackName" "diagnostic_globals" "operatorName" "test_opvars" "opvarName" "test_array_max_value" "opvarValueType" "0" "opvarValueFloat" "0" "opvarIndex" "0" "setOnSpawn" "0" }
+ent_fire scmd_ram_writer SetOpvarIndex 2;ent_fire scmd_ram_writer ChangeOpvarValueAndSet 333;snd_sos_print_operator_stack_operator diagnostic_globals test_opvars
+snd_sos_print_operator_stack_operator diagnostic_globals test_opvars

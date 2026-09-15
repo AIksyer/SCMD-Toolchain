@@ -1,6 +1,7 @@
 #include "scmd/simulator.h"
 #include "scmd/version.h"
 #include "bytecode_internal.hpp"
+#include "sos_sim.hpp"
 
 #include <algorithm>
 #include <array>
@@ -155,6 +156,7 @@ public:
         cvars_.reserve(256);
         cvars_["sv_cheats"] = "1";
         cvars_["tv_window_size"] = "0";
+        sos_ = std::make_unique<scmd::sim::SosSimulator>(cvars_);
     }
 
     int run() {
@@ -249,6 +251,7 @@ private:
     std::unordered_map<std::string, SourceStamp> source_stamps_;
     std::unordered_map<std::string, Alias> aliases_;
     std::unordered_map<std::string, std::string> cvars_;
+    std::unique_ptr<scmd::sim::SosSimulator> sos_;
     std::priority_queue<std::shared_ptr<Stream>, std::vector<std::shared_ptr<Stream>>, StreamLater> ready_;
     uint64_t next_stream_id_ = 1;
     uint64_t now_ms_ = 0;
@@ -265,6 +268,9 @@ private:
     uint64_t alias_generation_ = 0;
     uint64_t completion_alias_generation_ = (std::numeric_limits<uint64_t>::max)();
     std::vector<std::string> completion_aliases_;
+    bool console_visible_ = true;
+    std::vector<std::string> screen_lines_;
+    std::string screen_partial_;
     bool failed_ = false;
 
     static uint64_t fnv1a64_text(std::string_view a, std::string_view b) {
@@ -496,11 +502,34 @@ private:
         return true;
     }
 
+    void screen_write(const std::string &text, bool newline) {
+        if (!console_visible_) return;
+        std::cout << text;
+        screen_partial_ += text;
+        if (newline) {
+            std::cout << '\n';
+            screen_lines_.push_back(screen_partial_);
+            screen_partial_.clear();
+            if (screen_lines_.size() > 512u) screen_lines_.erase(screen_lines_.begin(), screen_lines_.begin() + 256);
+        }
+        std::cout.flush();
+    }
+
+    void screen_line(const std::string &text) { screen_write(text, true); }
+
+    void engine_line(const std::string &text) { screen_line(text); }
+
+    void screen_clear() {
+        screen_lines_.clear();
+        screen_partial_.clear();
+    }
+
     static bool is_builtin(std::string_view name) {
         const std::string n = lower_ascii(name);
         return n == "alias" || n == "exec" || n == "execifexists" || n == "exec_async" || n == "sleep" ||
-               n == "clear" || n == "echo" || n == "echoln" || n == "incrementvar" || n == "multvar" ||
-               n == "say" || n == "say_team" || n == "setinfo" || n == "toggle";
+               n == "clear" || n == "clearall" || n == "hideconsole" || n == "showconsole" || n == "kill" || n == "help" || n == "version" || n == "echo" || n == "echoln" || n == "incrementvar" || n == "multvar" ||
+               n == "say" || n == "say_team" || n == "setinfo" || n == "toggle" || n == "ent_create" || n == "ent_fire" ||
+               n == "cl_sos_test_set_opvar" || n == "cl_sos_test_get_opvar" || n.rfind("snd_sos_", 0) == 0;
     }
 
     const std::string &reg_string(const Stream &stream, uint8_t reg) const {
@@ -613,7 +642,7 @@ private:
         case Op::ExecIfExistsI:
         case Op::ExecAsyncI: {
             const bool immediate = op == Op::ExecI || op == Op::ExecIfExistsI || op == Op::ExecAsyncI;
-            const std::string &ref = immediate ? package_.str(ins.x) : reg_string(stream, ins.a);
+            const std::string ref = immediate ? package_.str(ins.x) : reg_string(stream, ins.a);
             const bool report = op != Op::ExecIfExists && op != Op::ExecIfExistsI;
             if (!safe_exec_ref(ref)) {
                 if (report) std::cerr << "exec: invalid cfg path '" << ref << "'\n";
@@ -626,10 +655,11 @@ private:
             }
             ++exec_calls_;
             if (op == Op::ExecAsync || op == Op::ExecAsyncI) {
-                if (options_.engine_messages) std::cout << "[InputService] queuing " << ref << " for async execution\n";
+                if (options_.engine_messages && console_visible_) engine_line("[InputService] queuing " + ref + " for async execution");
                 submit_block(block, true);
-            } else if (!push_block(stream, block)) {
-                return StepResult::Failed;
+            } else {
+                if (options_.engine_messages && console_visible_) engine_line("[InputService] execing " + ref);
+                if (!push_block(stream, block)) return StepResult::Failed;
             }
             return StepResult::CommandBoundary;
         }
@@ -647,16 +677,18 @@ private:
             return StepResult::Sleep;
         }
         case Op::Clear:
-            if (options_.ansi_clear && options_.interactive) std::cout << "\x1b[2J\x1b[H";
+            screen_clear();
+            if (options_.ansi_clear && options_.interactive && console_visible_) std::cout << "\x1b[2J\x1b[H";
             return StepResult::CommandBoundary;
         case Op::Echo:
         case Op::EchoLn:
         case Op::EchoI:
         case Op::EchoLnI: {
             const std::string &text = (op == Op::EchoI || op == Op::EchoLnI) ? package_.str(ins.x) : reg_string(stream, ins.a);
-            std::cout << text;
-            if (op == Op::EchoLn || op == Op::EchoLnI) std::cout << '\n';
-            std::cout.flush();
+            if (console_visible_) {
+                if (op == Op::Echo || op == Op::EchoI) screen_line(std::string("[Console] ") + text);
+                else screen_line(text);
+            }
             return StepResult::CommandBoundary;
         }
         case Op::Say:
@@ -746,6 +778,21 @@ private:
             std::cerr << "multvar: expected <cvar> <min> <max> <factor>\n"; return StepResult::CommandBoundary;
         }
 
+        if (command == "hideconsole") { console_visible_ = false; return StepResult::CommandBoundary; }
+        if (command == "showconsole") { console_visible_ = true; return StepResult::CommandBoundary; }
+        if (command == "clearall") {
+            screen_clear();
+            if (options_.ansi_clear && options_.interactive && console_visible_) std::cout << "\x1b[2J\x1b[H";
+            return StepResult::CommandBoundary;
+        }
+        /* These are real CS2 builtins.  They must win over aliases even though
+         * the simulator does not emulate their gameplay side effects. */
+        if (command == "kill" || command == "help" || command == "version") return StepResult::CommandBoundary;
+
+        if (sos_ && sos_->handles(command) && sos_->execute(argv)) {
+            return StepResult::CommandBoundary;
+        }
+
         if (auto cv = cvars_.find(command); cv != cvars_.end()) {
             if (argv.size() >= 2u) cv->second = argv[1];
             else std::cout << command << " = " << cv->second << '\n';
@@ -756,7 +803,7 @@ private:
             if (!push_block(stream, alias->second.block)) return StepResult::Failed;
             return StepResult::CommandBoundary;
         }
-        std::cout << "Unknown command: " << argv[0] << '\n';
+        if (console_visible_) screen_line("Unknown command: " + argv[0]);
         return StepResult::CommandBoundary;
     }
 
@@ -798,6 +845,10 @@ private:
                 if (!stream->stack.empty()) ready_.push(std::move(stream));
             }
         }
+        /* snd_opvar_set SetOnSpawn changes are observed one entity/SOS update
+         * later. Keeping them pending until this submitted console run drains
+         * reproduces the useful same-line-old / next-line-new behavior. */
+        if (sos_) sos_->flush_deferred();
         return true;
     }
 
@@ -822,13 +873,19 @@ private:
     }
 
     std::vector<std::string> command_completions(std::string_view prefix_view) {
-        static const std::array<std::string_view, 17> builtins = {
-            "alias", "clear", "echo", "echoln", "exec", "exec_async", "execifexists", "incrementvar",
-            "multvar", "say", "say_team", "setinfo", "sleep", "toggle", "help", "quit", "exit"
+        static const std::array<std::string_view, 22> builtins = {
+            "alias", "clear", "clearall", "echo", "echoln", "exec", "exec_async", "execifexists",
+            "hideconsole", "showconsole", "incrementvar", "multvar", "say", "say_team", "setinfo",
+            "sleep", "toggle", "help", "kill", "quit", "exit", "status"
         };
         const std::string prefix = lower_ascii(prefix_view);
         std::set<std::string> found;
         for (std::string_view b : builtins) if (std::string(b).rfind(prefix, 0) == 0) found.emplace(b);
+        if (sos_) {
+            for (const std::string &name : sos_->command_names()) {
+                if (name.rfind(prefix, 0) == 0) found.emplace(name);
+            }
+        }
         if (completion_alias_generation_ != alias_generation_) {
             completion_aliases_.clear();
             completion_aliases_.reserve(aliases_.size());
@@ -909,8 +966,18 @@ private:
         } else if (cmd == "cache") {
             std::cout << "cache=" << (options_.use_cache ? cache_root_.string() : std::string("OFF"))
                       << " hits=" << cache_hits_ << " misses=" << cache_misses_ << '\n';
+        } else if (cmd == "screen") {
+            size_t n = 24u;
+            if (argv.size() > 1u) {
+                try { n = static_cast<size_t>(std::stoul(argv[1])); } catch (...) { n = 24u; }
+                n = std::clamp<size_t>(n, 1u, 200u);
+            }
+            std::cout << "[screen]\n";
+            const size_t start = screen_lines_.size() > n ? screen_lines_.size() - n : 0u;
+            for (size_t i = start; i < screen_lines_.size(); ++i) std::cout << screen_lines_[i] << '\n';
+            if (!screen_partial_.empty()) std::cout << screen_partial_ << '\n';
         } else if (cmd == "help") {
-            std::cout << ":stats  :time  :aliases [prefix]  :cvars  :modules [prefix]  :complete <line>\n"
+            std::cout << ":stats  :time  :screen [lines]  :aliases [prefix]  :cvars  :modules [prefix]  :complete <line>\n"
                       << ":precompile  :cache  :quit\n";
         } else if (cmd != "quit" && cmd != "q" && cmd != "exit") {
             std::cout << "Unknown simulator meta-command: :" << argv[0] << '\n';

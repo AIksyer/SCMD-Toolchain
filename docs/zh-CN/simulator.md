@@ -7,7 +7,7 @@ scmdc      compile / build / pack
 scmdsim    lazy CFG compile / bytecode / run / interact
 ```
 
-执行核心仍是 **SCB v1 16-register VM**。0.10.0 的变化主要在开发期加载策略：CFG root 从“启动时全量 AOT”改成“`exec` 时按 module 编译”。
+执行核心仍是 **SCB v1 16-register VM**。0.11.1 的变化主要在开发期加载策略：CFG root 从“启动时全量 AOT”改成“`exec` 时按 module 编译”。
 
 ## 启动方式
 
@@ -190,9 +190,36 @@ cs2-2026
 ## 已固化的 CS2 quirks
 
 - alias 尾随 argv 不进入 alias body。
-- 当前 `|` 按普通文本，不模拟已不存在的 pipe。
+- 当前 `|` 按普通文本，不模拟已不存在的 pipe；回归测试同时验证 `echo x | setinfo y` 只会原样 echo，右侧 `setinfo` **不得执行**。
 - `exec_async + sleep` 使用 deterministic virtual scheduler，不真实等待墙钟。
 
 ## SCB
 
 SCB v1 仍是 canonical binary execution format：magic / ABI / profile / string pool / blocks / module table / fixed predecoded instructions / checksum。CFG-root lazy module 最终也是编译到相同 VM representation 后执行。
+
+## SOS compatibility model（实验）
+
+`cs2-2026` profile 现在包含一套 **Source 2 Sound Operator System (SOS) compatibility model**。它不是音频渲染器，也不是对 Source 2 内部实现的完整复刻；目标是把 2026 CS2 实机实验中已经验证的数值/数据流行为固化进 `scmdsim`，这样相关 CFG/Console 实验不必每次都进游戏验证。
+
+当前建模范围包括：
+
+- `snd_sos_print_operators` / `snd_sos_print_operator_stacks` / stack 与 operator dump；
+- `snd_sos_set_operator_field`（float/bool/enum；string 仍按实机表现拒绝）；
+- `snd_sos_resolve_execute_operator`；
+- `math_float`、`math_filter_float`、`math_remap_float`、`math_string`、float switch；
+- `opvar_get_float` / `opvar_set_float` / `opvar_increment_float`；
+- local opvar 普通字段读写；
+- `diagnostic_globals/test_opvars` 的标量与数组 fixture、indexed load；
+- `convar_get` / `convar_set` 数值桥；
+- `snd_opvar_set` 的 `SetOnSpawn` 延迟字段 patch（包括非空 string）；
+- 持久 `snd_opvar_set` entity 的 `SetStackName/SetOperatorName/SetOpvarName/SetOpvarIndex/ChangeOpvarValueAndSet/SetOpvar` 输入，可用于复现 deferred indexed STORE；
+- 已观察到的 write-context 差异：`update_test_opvar -> diagnostic_globals` 可写，而 soundscape stack 对同一 global target 只读；
+- SOS 数值字段按 float32 精度存储，保留约 `2^24` 的整数精确边界；
+- `sos_import_stack` 的已解析 graph 采用静态展开模型：运行时修改 `import_stack` 字符串不会重建 flattened child graph；
+- `cl_sos_test_set_opvar/get_opvar` 保留实机的 `!!!FIXME: SOSSetOpvarFloat API not ported` 行为。
+
+`ent_create snd_opvar_set ... setOnSpawn 1` 的 patch 在一条提交的 Console 输入完全 drain 后再生效，因此同一行后续 dump 仍能看到旧值，下一行看到新值。这是为了复现我们实机看到的 deferred entity/SOS update 语义。
+
+另外，`cs2-2026` CFG loader 也复刻 CS2 的单命令 tokenizer 上限：命令长度超过 **510 UTF-8 bytes** 时会输出 `WARNING: Command too long... ignoring!` 并忽略该命令。这样 optimizer 如果再次生成不合法的超长 alias，simulator 不会替真实 CS2“错误地执行成功”。
+
+这套模型刻意只编码**已经验证过的 fixture 与 quirks**。未知 SOS stack/operator 仍可能与真实 CS2 不同；需要扩展时，应先用实机日志确定语义，再把测试和 fixture 一起加入 simulator。

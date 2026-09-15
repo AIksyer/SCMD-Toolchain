@@ -1,0 +1,17 @@
+volatile u8 host_state = 0;
+
+@noopt
+function host_bridge()
+{
+    host_state = 1;
+    host_state = 2;
+}
+
+function main()
+{
+    host_bridge();
+    if(host_state == 2)
+    {
+        console.print("VOLATILE_NOOPT_PASS");
+    }
+}

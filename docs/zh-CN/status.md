@@ -1,81 +1,68 @@
-# 0.10 当前实现状态
+# 0.11 当前实现状态
 
 ## 语言已实现
 
-- `get` 多文件加载 / flat namespace
+- `get` 多文件 / flat namespace
 - `bool` / `u8` / `var`
+- `const` compile-time bool/integer values
+- global fixed `bool[]` / `u8[]`（1..256）
+- runtime array read / dynamic-index write (`=`)
+- `compile {}`：普通 `if / while / for`、compile locals、array initialization、`assert`
+- `volatile` runtime storage
+- `@noopt`、`@export`、`@resident` top-level attributes
 - UTF-8 / 中文标识符
-- `function name()`
-- `if(...) / else`
-- `while(...)`
-- `for(init; cond; step)`
-- `return;`
-- `+ - * / %`
-- `== != < <= > >=`
-- `! && || ^(bool)`
-- `~ & | ^ << >>`
-- 复合赋值
-- `block </ />`
-- `record`
-- Block 内 `jump`
-- `Block.run()`
-- `Block.jump(Block.Record)`
-- `console.print()` / `console.clear()`
-- `chat.send()` / `teamchat.send()`
-- `command.exec()`
-- `wait Nms/Ns/Nticks`
+- `function` / `export function` / `resident function`
+- `if / else`、`while`、`for`、`return;`
+- u8 算术/比较/位运算/复合赋值
+- Block / record / jump / Block.run
+- Console/chat/raw command APIs
+- `wait`
 - `.scmdproj`
-- command-buffer-safe page loader
+- command-buffer-safe paging + mandatory demand loading
+
+## 0.11 编译期约束
+
+- compile phase 操作 AST/value，不是 textual macro；
+- compile control flow 与 runtime SCMD 使用同一语法；
+- compile-time function call 目前只开放 `assert(expr)`；
+- 一等 compile-time string/array literal 尚未实现；
+- 没有 subprocess/shell/任意 host file-write；
+- fixed arrays 当前仅全局 `bool/u8`，长度 1..256；
+- dynamic array compound write 暂未实现。
 
 ## 工具链已实现
 
-- `scmdc` C17 frontend/backend
-- `scmdsim` C++20 独立模拟器
+- `scmdc` C17 frontend/backend + compile interpreter
+- `scmdsim` C++20 Console/SCB simulator
 - SCB ABI 1
-- `scmdc pack CFGROOT -o file.scb`
-- CFG root -> lazy per-module SCB compile + in-process cache
-- precompiled `.scb` load / verify
-- 16-register VM
-- fused Console bytecode ops
+- `libvcs16` / `libvcs16_scmd`
+- `vcs16as` / `vcs16run` / `vcs16dump` / `vcs16scmd`
+- CFG root lazy source view + persistent module cache
 - deterministic async virtual scheduler
-- `exec` lazy module compile / hot reload；SCB 模式 module table dispatch
-- Tab command / alias / cvar completion
-- `exec` / `execifexists` / `exec_async` path completion
-- command history
-- SCB checksum / bounds verifier
-- 运行中新增/修改 CFG 自动发现与下一次 `exec` 重编译
-- 可选 `.scmdcache/modules/` 持久 module cache
-- `--precompile` / `:precompile` / `--save-scb` 显式全量 AOT
-- plain `quit` / `exit` 与 Ctrl+C line-editor 退出
+- SCB pack / verifier / fixed-width VM
+- real-CS2 compatibility rules：literal `|`、builtin precedence、InputService exec messages、echo/echoln UI distinction
 
 ## 暂未实现
 
 语言：
 
-- 函数参数
-- 函数返回值表达式
+- 函数参数 / 返回值表达式
 - 递归调用栈
-- `Block.runUntil()`
-- `Block.runRange()`
-- nested `record`
-- Block 变量 / Block 数组 / 局部 Block
-- `break` / `continue`
-- module namespace / `get ... as ...`
-- 多语言关键字包
-- 一等 `string`
+- compile-time user functions / compile-time strings
+- local fixed arrays / multidimensional arrays
+- `break / continue`
+- module namespace
 - formatter / LSP
-- 稳定诊断错误码
+- stable diagnostic IDs
+- Block.runUntil / runRange / nested record
 
 字节码 / simulator：
 
-- 从正式 lowered IR 直接双发 CFG/SCB（0.9 仍以 emitted CFG 为 canonical SCB 输入）
-- SCB 压缩 / 变长磁盘编码
-- bytecode decompiler / CFG -> SCMD decompiler
-- 完整 Source 2 Console command set
-- full cursor-editing readline UI
+- 正式 lowered IR 同时直出 CFG/SCB
+- SCB 压缩/变长编码
+- decompiler
+- 完整 Source 2 command set
 
-## CFG-root / SCB 注意事项
+## CFG-root / SCB
 
-`scmdsim cfg-root` 在 0.10 中是开发期 **lazy source view**：启动不全量编译；`exec` 时读取目标 CFG，size/mtime 改变后自动重编译，新增文件也可直接执行 / Tab 补全。
-
-预编译 `.scb` 则是不可变 package snapshot；如果需要固定发布物或 benchmark，使用 `scmdc pack` / `--save-scb`。
+`scmdsim cfg-root` 是开发期 lazy source view；`.scb` 是不可变 package snapshot。真实 CS2 仍是 Console compatibility 的最终权威。

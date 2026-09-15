@@ -148,10 +148,13 @@ ScmdToken scmd_lexer_next(ScmdLexer *lx) {
         case ')': return tok(TOK_RPAREN, start, 1, line, col);
         case '{': return tok(TOK_LBRACE, start, 1, line, col);
         case '}': return tok(TOK_RBRACE, start, 1, line, col);
+        case '[': return tok(TOK_LBRACKET, start, 1, line, col);
+        case ']': return tok(TOK_RBRACKET, start, 1, line, col);
         case ';': return tok(TOK_SEMI, start, 1, line, col);
         case ',': return tok(TOK_COMMA, start, 1, line, col);
         case '.': return tok(TOK_DOT, start, 1, line, col);
         case ':': return tok(TOK_COLON, start, 1, line, col);
+        case '@': return tok(TOK_AT, start, 1, line, col);
         case '=': return tok(TOK_ASSIGN, start, 1, line, col);
         case '+': return tok(TOK_PLUS, start, 1, line, col);
         case '-': return tok(TOK_MINUS, start, 1, line, col);
@@ -174,13 +177,13 @@ const char *scmd_token_name(ScmdTokenKind kind) {
     switch (kind) {
         case TOK_EOF: return "end of file"; case TOK_ERROR: return "invalid token";
         case TOK_IDENT: return "identifier"; case TOK_STRING: return "string"; case TOK_NUMBER: return "number";
-        case TOK_GET: return "get"; case TOK_VAR: return "var"; case TOK_BOOL: return "bool"; case TOK_U8: return "u8";
-        case TOK_FUNCTION: return "function"; case TOK_IF: return "if"; case TOK_ELSE: return "else"; case TOK_WHILE: return "while";
+        case TOK_GET: return "get"; case TOK_CONST: return "const"; case TOK_COMPILE: return "compile"; case TOK_VOLATILE: return "volatile"; case TOK_VAR: return "var"; case TOK_BOOL: return "bool"; case TOK_U8: return "u8";
+        case TOK_FUNCTION: return "function"; case TOK_EXPORT: return "export"; case TOK_RESIDENT: return "resident"; case TOK_IF: return "if"; case TOK_ELSE: return "else"; case TOK_WHILE: return "while";
         case TOK_FOR: return "for"; case TOK_RETURN: return "return"; case TOK_TRUE: return "true"; case TOK_FALSE: return "false";
         case TOK_WAIT: return "wait"; case TOK_BLOCK_KW: return "block"; case TOK_RECORD: return "record"; case TOK_JUMP: return "jump";
-        case TOK_LPAREN: return "("; case TOK_RPAREN: return ")"; case TOK_LBRACE: return "{"; case TOK_RBRACE: return "}";
+        case TOK_LPAREN: return "("; case TOK_RPAREN: return ")"; case TOK_LBRACE: return "{"; case TOK_RBRACE: return "}"; case TOK_LBRACKET: return "["; case TOK_RBRACKET: return "]";
         case TOK_BLOCK_OPEN: return "</"; case TOK_BLOCK_CLOSE: return "/>"; case TOK_SEMI: return ";"; case TOK_COMMA: return ",";
-        case TOK_DOT: return "."; case TOK_COLON: return ":"; case TOK_ASSIGN: return "="; case TOK_PLUS: return "+"; case TOK_MINUS: return "-";
+        case TOK_DOT: return "."; case TOK_COLON: return ":"; case TOK_AT: return "@"; case TOK_ASSIGN: return "="; case TOK_PLUS: return "+"; case TOK_MINUS: return "-";
         case TOK_STAR: return "*"; case TOK_SLASH: return "/"; case TOK_PERCENT: return "%"; case TOK_BANG: return "!"; case TOK_TILDE: return "~";
         case TOK_AMP: return "&"; case TOK_PIPE: return "|"; case TOK_CARET: return "^"; case TOK_LT: return "<"; case TOK_LE: return "<=";
         case TOK_GT: return ">"; case TOK_GE: return ">="; case TOK_SHL: return "<<"; case TOK_SHR: return ">>"; case TOK_AND_AND: return "&&";

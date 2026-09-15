@@ -12,7 +12,7 @@ SCMD 0.9 引入 **SCB（SCMD Bytecode）ABI 1**。
 
 ## 数据流
 
-0.10.0 仍保留同一个 canonical 路径：
+0.11.1 仍保留同一个 canonical 路径：
 
 ```text
 .scmd
@@ -41,7 +41,7 @@ scmdsim 16-register VM
 
 不会因为 simulator “走捷径”而被隐藏。
 
-未来可以把 CFG emitter 与 SCB emitter 都接到同一套更正式的 lowered IR；0.10.0 尚未进行这次 codegen IR 重构。
+未来可以把 CFG emitter 与 SCB emitter 都接到同一套更正式的 lowered IR；0.11.1 尚未进行这次 codegen IR 重构。
 
 ## `scmdc pack`
 
@@ -65,7 +65,7 @@ scmdc pack build -o program.scb --profile cs2-2026
 scmdsim build
 ```
 
-0.10.0 默认使用 lazy module compile：
+0.11.1 默认使用 lazy module compile：
 
 ```text
 enter REPL immediately
@@ -132,7 +132,7 @@ checksum 当前为 64-bit FNV-1a。它用于检测破损/意外修改，不是�
 SCB ABI 与工具版本独立：
 
 ```text
-SCMD toolchain 0.10.0
+SCMD toolchain 0.11.1
 SCB ABI 1
 ```
 
@@ -280,7 +280,7 @@ stream id
 
 ## CFG source view 与 SCB snapshot
 
-0.10.0 区分两种输入模型。
+0.11.1 区分两种输入模型。
 
 CFG root：
 

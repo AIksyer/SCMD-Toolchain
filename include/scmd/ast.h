@@ -15,6 +15,7 @@ typedef enum ScmdExprKind {
     EXPR_BOOL,
     EXPR_INT,
     EXPR_IDENT,
+    EXPR_INDEX,
     EXPR_CALL,
     EXPR_UNARY,
     EXPR_BINARY
@@ -45,6 +46,10 @@ struct ScmdExpr {
         bool boolean;
         uint64_t integer;
         char *name;
+        struct {
+            char *name;
+            ScmdExpr *index;
+        } index;
         struct {
             char *name;
             ScmdExpr **args;
@@ -86,6 +91,7 @@ typedef enum ScmdWaitUnit {
 typedef enum ScmdStmtKind {
     STMT_VAR_DECL,
     STMT_ASSIGN,
+    STMT_ARRAY_ASSIGN,
     STMT_IF,
     STMT_WHILE,
     STMT_FOR,
@@ -111,8 +117,11 @@ struct ScmdStmt {
             ScmdTypeKind resolved_type;
             char *name;
             ScmdExpr *init;
+            bool is_volatile;
+            bool noopt;
         } var_decl;
         struct { char *name; ScmdAssignOp op; ScmdExpr *value; } assign;
+        struct { char *name; ScmdExpr *index; ScmdAssignOp op; ScmdExpr *value; } array_assign;
         struct { ScmdExpr *cond; ScmdStmt *then_block; ScmdStmt *else_block; } if_stmt;
         struct { ScmdExpr *cond; ScmdStmt *body; } while_stmt;
         struct { ScmdStmt *init; ScmdExpr *cond; ScmdStmt *step; ScmdStmt *body; } for_stmt;
@@ -139,11 +148,28 @@ typedef struct ScmdImport {
     struct ScmdImport *next;
 } ScmdImport;
 
+typedef struct ScmdConst {
+    char *name;
+    ScmdExpr *value;
+    uint64_t evaluated;
+    ScmdTypeKind evaluated_type;
+    bool ready;
+    int line;
+    int col;
+    struct ScmdConst *next;
+} ScmdConst;
+
 typedef struct ScmdGlobal {
     ScmdTypeKind declared_type;
     ScmdTypeKind resolved_type;
     char *name;
     ScmdExpr *init;
+    bool is_volatile;
+    bool noopt;
+    bool is_array;
+    ScmdExpr *array_len_expr;
+    size_t array_len;
+    uint64_t *array_init_values; /* filled by the compile-time pass */
     int line;
     int col;
     struct ScmdGlobal *next;
@@ -151,6 +177,9 @@ typedef struct ScmdGlobal {
 
 typedef struct ScmdFunction {
     char *name;
+    bool exported; /* stable public console alias */
+    bool resident; /* body is emitted into the eager core instead of demand-loaded */
+    bool noopt;    /* preserve this function's generated CFG without optimizer rewrites */
     ScmdStmt *body;
     int line;
     int col;
@@ -165,11 +194,20 @@ typedef struct ScmdBlock {
     struct ScmdBlock *next;
 } ScmdBlock;
 
+typedef struct ScmdCompileBlock {
+    ScmdStmt *body;
+    int line;
+    int col;
+    struct ScmdCompileBlock *next;
+} ScmdCompileBlock;
+
 typedef struct ScmdProgram {
     ScmdImport *imports;
+    ScmdConst *constants;
     ScmdGlobal *globals;
     ScmdFunction *functions;
     ScmdBlock *blocks;
+    ScmdCompileBlock *compile_blocks;
 } ScmdProgram;
 
 void scmd_program_dispose(ScmdProgram *program);

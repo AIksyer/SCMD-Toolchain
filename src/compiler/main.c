@@ -1,4 +1,5 @@
 #include "scmd/codegen.h"
+#include "scmd/comptime.h"
 #include "scmd/bytecode.h"
 #include "scmd/common.h"
 #include "scmd/loader.h"
@@ -103,6 +104,7 @@ static int compile_single(int argc, char **argv) {
     ScmdSourceList sources = {0};
     if (!scmd_load_program(input, &program, &sources)) return 1;
     int rc = 1;
+    if (!scmd_comptime_run(input, &program)) goto cleanup_program;
     if (!scmd_sema_check(input, &program)) goto cleanup_program;
 
     char *owned_output = NULL;

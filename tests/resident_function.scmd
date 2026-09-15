@@ -1,0 +1,9 @@
+export resident function resident_ping()
+{
+    console.print("RESIDENT_OK");
+}
+
+function main()
+{
+    resident_ping();
+}
